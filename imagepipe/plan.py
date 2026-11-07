@@ -26,8 +26,8 @@ def compile_plan(package_dir: Path, config: ImageConfig, episode_ids: list[str] 
             description=(_frame_description(slot, catalogue, slot_style)
                          if slot.get("purpose") == "first_frame" else _description(slot, slot_style)),
             reference_guide=_reference_guide(reference_ids, catalogue),
-            width=(config.generation.native_width if config.provider == "gpt" else config.generation.width),
-            height=(config.generation.native_height if config.provider == "gpt" else config.generation.height),
+            width=(config.generation.native_width if config.provider != "qwen" else config.generation.width),
+            height=(config.generation.native_height if config.provider != "qwen" else config.generation.height),
         )
         tasks.append(ImageTask(
             asset_id=asset_id,
@@ -186,9 +186,8 @@ def _frame_anchors(catalogue: dict[str, dict], sets: list[dict], *, auto: bool =
         planned = catalogue[members[0]].get("scene_anchor_shot_id")
         if planned:
             matches = [member for member in members if catalogue[member]["shot_id"] == planned]
-            if not matches:
-                raise ValueError(f"Scene anchor shot {planned!r} is not in its scene")
-            anchor = matches[0]
+            # A script scene can span location/time groups, each needing its own anchor.
+            anchor = matches[0] if matches else members[0]
         else:
             anchor = members[0]
         anchors.update((member, anchor) for member in members if member != anchor)

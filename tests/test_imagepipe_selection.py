@@ -82,6 +82,15 @@ class ImageEpisodeSelectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "season package"):
             compile_plan(self.package / "episodes/ep01", ImageConfig(), ["ep01"])
 
+    def test_scene_anchor_stays_within_location_and_time_group(self):
+        manifest_path = self.package / "image_slots.json"
+        manifest = json.loads(manifest_path.read_text())
+        frame = manifest["first_frames"][1]
+        frame.update(location_id="future-room", time_of_day="night")
+        manifest_path.write_text(json.dumps(manifest))
+        tasks = {task.asset_id: task for task in compile_plan(self.package, ImageConfig(), ["ep01"]).tasks}
+        self.assertNotIn("first-frame-ep01_s001", tasks["first-frame-ep01_s002"].reference_ids)
+
     def test_reference_budget_uses_configured_priority_without_restricting_cast(self):
         config = ImageConfig(api={"max_reference_images": 2}, continuity={
             "auto_scene_anchors": False,

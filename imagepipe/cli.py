@@ -15,6 +15,7 @@ from scriptpipe.batch import export_batch, parse_episode_range
 from .models import ImageConfig
 from .pipeline import load_run, run
 from .plan import compile_plan
+from .tool_bridge import accept_image, pending_requests
 
 
 def main() -> int:
@@ -22,15 +23,26 @@ def main() -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     start = commands.add_parser("run", help="Fill an episode or season's image slots")
     start.add_argument("package", type=Path)
-    start.add_argument("--provider", choices=["gpt", "qwen"], help="Image backend (default: gpt)")
+    start.add_argument("--provider", choices=["gpt", "qwen", "codex"], help="Image backend (default: gpt)")
     start.add_argument("--config", type=Path, help="Override the selected provider's YAML config")
     start.add_argument("--output", type=Path)
     start.add_argument("--episodes", type=parse_episode_range, help="Episode range, for example ep01-ep10 or 1-10")
     start.add_argument("--delivery", type=Path, help="Export the selected episodes as a video-ready package after images complete")
-    for name in ("resume", "status"):
+    for name in ("resume", "status", "pending"):
         commands.add_parser(name).add_argument("run_dir", type=Path)
+    accept = commands.add_parser("accept", help="Supply a Codex tool-generated image to its pending task")
+    accept.add_argument("run_dir", type=Path)
+    accept.add_argument("asset_id")
+    accept.add_argument("image_path", type=Path)
     args = parser.parse_args()
     try:
+        if args.command == "pending":
+            print(json.dumps(pending_requests(args.run_dir.resolve()), ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "accept":
+            print(json.dumps(accept_image(args.run_dir.resolve(), args.asset_id, args.image_path),
+                             ensure_ascii=False))
+            return 0
         if args.command == "status":
             state = json.loads((args.run_dir / "state.json").read_text())
             print(json.dumps({
@@ -90,7 +102,8 @@ def main() -> int:
 
 
 def _load_config(path: Path | None, provider: str | None) -> ImageConfig:
-    path = path or Path("configs/imagepipe_qwen.yaml" if provider == "qwen" else "configs/imagepipe.yaml")
+    profiles = {"qwen": "imagepipe_qwen.yaml", "codex": "imagepipe_codex.yaml"}
+    path = path or Path("configs") / profiles.get(provider, "imagepipe.yaml")
     config = ImageConfig.model_validate(yaml.safe_load(path.read_text()) or {})
     if provider and config.provider != provider:
         raise ValueError(f"{path} selects {config.provider}; choose a config for --provider {provider}")

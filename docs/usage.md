@@ -23,6 +23,7 @@ scriptpipe --source /data/project/source.txt --notes /data/project/editor_notes.
   --delivery /data/season --production-config configs/b200.yaml
 
 # 补图：输入为含 image_slots.json 的整季或单集目录
+ulimit -n 16384  # 高并发任务会同时打开多张参考图
 imagepipe run /data/season --config configs/imagepipe.yaml --output /data/runs/images
 imagepipe status /data/runs/images
 imagepipe resume /data/runs/images
@@ -42,6 +43,32 @@ videopipe collect /data/runs/video-season
 模型请求默认并发 20，可通过 `--concurrency` 覆盖。当前 DeepSeek 配额为 5,000,000 TPM，每 1,000,000 TPM 允许并发 5，最大并发 25，默认取其 80%。`--notes` 可省略。短剧交付到 `<output>/delivery/`；长剧可以指定 `--delivery`，也可用 `--stop-after season|plans|drafts|review` 在阶段结束时暂停。剧本续跑使用相同命令和输出目录，复用已存阶段；调整素材、创作 brief 或模板后用新输出目录开始，避免复用旧稿。
 
 图片的 `run` 遇到已有 `tasks.json` 会读取已存计划；目标图片存在即复用。默认运行目录为 `runs/imagepipe/<包名>/<provider>/`，按集运行再追加集范围。切换后端时使用对应运行目录；`resume` 使用原记录的后端，兼容旧 Qwen 任务。`--config` 可指定对应后端的自定义 YAML，与显式 `--provider` 保持一致。全剧包内的状态字段保留文字导出时的快照；分批交付包在图片齐备后写入实际交付状态。视频入口按实际文件是否存在校验。
+
+在 Codex 会话中可使用内置生图工具补图，配置见 [imagepipe_codex.yaml](../configs/imagepipe_codex.yaml)。该模式由 imagepipe 管理提示词、参考图依赖、图片保存和交付；Codex 读取 `pending` 返回的 `tool_args` 并调用 `image_gen.imagegen`，再用 `accept` 交回生成文件的本地路径。工具最多接收 5 张参考图，更多参考图会按原顺序、原像素横排到最多 5 张输入拼板，在提示词前附上编号映射，原始提示词保存在任务计划中。默认最多同时等待 16 张图片，复用已有图片，流程使用本地文件交换而无需 API 密钥。
+
+```bash
+imagepipe run projects/my_drama --provider codex --episodes ep01-ep20 \
+  --delivery deliveries/my_drama_ep01-ep20
+
+# 在另一个终端或 Codex 工具中获取已满足依赖的任务
+imagepipe pending runs/imagepipe/my_drama/codex/ep01-ep20
+
+# Codex 按任务的 tool_args 调用内置生图后，将对应结果交回系统
+imagepipe accept runs/imagepipe/my_drama/codex/ep01-ep20 \
+  first-frame-ep01-ep01_s001 /path/to/generated/image.png
+```
+
+需要按批启动 Codex CLI 时，准备包含 `run_dir` 和 `remaining_asset_ids` 的交接 JSON；对应请求已保存在运行目录的 `requests/`。以下脚本生成固定的 `jobs.json`、`prompt.md` 和 `command.sh`，默认每个 worker 顺序处理最多 5 张，按 assignment 去重并跳过已有图片或回执。命令固定使用 `gpt-6.1-sol`、`high` 推理、`--enable image_generation`、`approval_policy=never` 和 `danger-full-access`；Python 使用仓库 `.venv/bin/python`。原生工具实际暴露 `quality` 时设置 `high`，当前 schema 未暴露时记录实情。
+
+```bash
+.venv/bin/python scripts/prepare_codex_image_jobs.py /data/image_handoff.json \
+  --output runs/imagepipe/my_drama/codex/ep01-ep20/cli_workers
+
+# 先启动两个 worker；后续可按同样方式逐对启动
+bash runs/imagepipe/my_drama/codex/ep01-ep20/cli_workers/worker_01/command.sh &
+bash runs/imagepipe/my_drama/codex/ep01-ep20/cli_workers/worker_02/command.sh &
+wait
+```
 
 ## 可配置的制作参数
 

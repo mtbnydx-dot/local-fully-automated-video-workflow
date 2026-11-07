@@ -1,0 +1,12 @@
+provider: codex
+generation:
+  model: codex-imagegen
+  native_width: 1152
+  native_height: 2048
+scheduler:
+  max_active_jobs: 16
+  poll_interval_seconds: 1
+  max_attempts: 1
+continuity:
+  auto_scene_anchors: true
+  reference_priority: {}

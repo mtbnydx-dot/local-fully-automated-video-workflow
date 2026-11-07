@@ -1,4 +1,4 @@
-"""Execute image dependencies through OpenAI images or Qwen's job queue."""
+"""Execute image dependencies through image services or a local tool bridge."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import json
 import shutil
 import time
 from collections import Counter
+from contextlib import AsyncExitStack
 from dataclasses import asdict
 from pathlib import Path
 
@@ -16,6 +17,7 @@ import httpx
 from .client import ImageClient
 from .delivery import deliver_original
 from .models import CopyTask, ImageConfig, ImagePlan, ImageTask
+from .tool_bridge import prepare_tool_args
 
 
 async def run(plan: ImagePlan, config: ImageConfig, run_dir: Path) -> dict:
@@ -40,8 +42,9 @@ class ImagePipeline:
     async def run(self) -> dict:
         _write_json(self.run_dir / "tasks.json", {**asdict(self.plan), "config": self.config.model_dump()})
         self._event("run_started", tasks=len(self.tasks), copies=len(self.plan.copies))
-        async with ImageClient(self.config) as client:
-            self.client = client
+        async with AsyncExitStack() as stack:
+            if self.config.provider != "codex":
+                self.client = await stack.enter_async_context(ImageClient(self.config))
             for task in self.plan.tasks:
                 self.workers[task.asset_id] = asyncio.create_task(self._run_task(task))
             await asyncio.gather(*self.workers.values())
@@ -83,6 +86,8 @@ class ImagePipeline:
         record.setdefault("submitted_at", time.time())
         if self.config.provider == "gpt":
             await self._generate_gpt(task, record, original)
+        elif self.config.provider == "codex":
+            await self._generate_codex(task, record, original)
         else:
             await self._generate_qwen(task, record, original)
         delivery_started = time.time()
@@ -117,6 +122,36 @@ class ImagePipeline:
                       quality=result.get("quality", self.config.generation.quality),
                       api_seconds=round(time.time() - record["submitted_at"], 3))
         self._event("generated", task.asset_id, request_id=record["request_id"], usage=record["usage"])
+
+    async def _generate_codex(self, task: ImageTask, record: dict, original: Path) -> None:
+        if original.is_file():
+            return
+        references = []
+        for ref in task.reference_ids:
+            native = self.run_dir / "originals" / f"{ref}.png"
+            references.append(native if native.is_file() else Path(self.tasks[ref].target_path))
+        tool_args = await asyncio.to_thread(
+            prepare_tool_args, task.prompt, references, self.run_dir / "reference_sheets" / task.asset_id,
+        )
+        request_path = self.run_dir / "requests" / f"{task.asset_id}.json"
+        response_path = self.run_dir / "responses" / f"{task.asset_id}.json"
+        if not request_path.exists():
+            record["attempts"] += 1
+        request_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_json(request_path, {
+            "asset_id": task.asset_id, "tool": "image_gen.imagegen", "tool_args": tool_args,
+            "target_path": task.target_path,
+        })
+        record.update(status="waiting_for_tool", request_path=str(request_path))
+        self._event("tool_requested", task.asset_id, request_path=str(request_path))
+        while not response_path.is_file():
+            await asyncio.sleep(self.config.scheduler.poll_interval_seconds)
+        response = json.loads(response_path.read_text())
+        original.parent.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(shutil.copy2, response["image_path"], original)
+        record.update(status="delivering", original=str(original), tool="image_gen.imagegen",
+                      tool_image_path=response["image_path"])
+        self._event("generated", task.asset_id, tool=record["tool"])
 
     async def _generate_qwen(self, task: ImageTask, record: dict, original: Path) -> None:
         references = [Path(self.tasks[ref].target_path) for ref in task.reference_ids]
@@ -215,4 +250,6 @@ def load_run(run_dir: Path) -> tuple[ImagePlan, ImageConfig]:
 
 
 def _write_json(path: Path, value: dict) -> None:
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+    pending = path.with_suffix(".json.tmp")
+    pending.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+    pending.replace(path)
