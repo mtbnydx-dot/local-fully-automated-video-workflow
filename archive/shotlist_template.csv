@@ -1,0 +1,4 @@
+shot_id,stage,status,duration_sec,aspect,width,height,start_image,prompt,negative_prompt,model,notes
+S001,keyframe,todo,0,16:9,1280,704,,describe the intended scene and camera here,blurry low quality distorted hands,flux2_dev_fp8mixed,make key visual
+S001,draft_ti2v,todo,4,16:9,1280,704,shots/01_keyframes/S001.png,slow dolly-in camera move, jitter flicker artifacts,wan2.2_ti2v_5B_fp16,check motion
+S001,final_i2v,todo,5,16:9,1280,704,shots/01_keyframes/S001.png,cinematic commercial dolly-in with soft RGB lighting, jitter flicker warped text,wan2.2_i2v_A14B_fp8,final clip

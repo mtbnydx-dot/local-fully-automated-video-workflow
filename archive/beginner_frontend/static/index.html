@@ -1,0 +1,1915 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>本地 AI 创作工作台</title>
+    <link rel="stylesheet" href="/static/styles.css?build=20261023-journey-1" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="23 7 16 12 23 17 23 7"></polygon>
+              <rect x="1" y="5" width="15" height="14" rx="2"></rect>
+            </svg>
+          </span>
+          <div class="brand-text">
+            <p class="eyebrow">ComfyUI 本地生成与后期</p>
+            <h1>本地 AI 创作工作台</h1>
+          </div>
+        </div>
+        <div class="top-actions">
+          <div class="status-strip" id="statusStrip">
+            <span class="dot muted"></span>
+            <span id="statusText" role="status" aria-live="polite">连接中</span>
+          </div>
+          <div class="mini-stat">
+            <strong id="topModelLabel">模型同步中</strong>
+            <span id="topModelContext">分镜生成与成片</span>
+          </div>
+        </div>
+      </header>
+
+      <nav class="view-tabs" aria-label="主视图切换">
+        <button class="view-tab" type="button" data-view="image-studio">图片创作</button>
+        <button class="view-tab" type="button" data-view="workflow">视频生成</button>
+        <button class="view-tab" type="button" data-view="process">视频处理</button>
+        <button class="view-tab" type="button" data-view="library">作品</button>
+        <button class="view-tab" type="button" data-view="tasks">任务</button>
+        <button class="view-tab" type="button" data-view="video-face-swap">视频换脸</button>
+        <button class="view-tab active" type="button" data-view="environment">环境与模型</button>
+        <button class="view-tab download-center-tab" type="button" data-view="download-center">
+          下载中心 <span class="download-tab-count hidden" id="downloadCenterTabCount">0</span>
+        </button>
+      </nav>
+
+      <section class="view view-workflow hidden" data-view="workflow" data-task="video" data-parameters="basic">
+        <header class="workspace-section-head creation-heading">
+          <h2 id="creationTaskTitle">视频生成</h2>
+          <div class="segmented" id="parameterLevel" aria-label="参数显示">
+            <button type="button" data-level="basic" class="active" aria-pressed="true">常用参数</button>
+            <button type="button" data-level="full" aria-pressed="false">全部参数</button>
+          </div>
+        </header>
+        <div class="workflow-context-bar">
+          <div><span>当前视频素材</span><strong id="workflowSourceLabel">未选择视频素材</strong></div>
+          <div class="workflow-context-actions">
+            <button class="secondary" type="button" id="chooseWorkflowSource">从作品选择</button>
+            <button class="secondary" type="button" id="clearProcessingSource">移除素材</button>
+          </div>
+        </div>
+        <div class="workflow">
+          <aside class="stepper" aria-label="视频处理工具">
+            <button class="step-button" type="button" data-step="deflicker">
+              <span>
+                <strong>修复与调色</strong>
+                <small data-step-summary>闪烁、色彩和锐度</small>
+              </span>
+            </button>
+            <button class="step-button" type="button" data-step="rife">
+              <span>
+                <strong>流畅度增强</strong>
+                <small data-step-summary>RIFE 2x 更顺滑</small>
+              </span>
+            </button>
+            <button class="step-button" type="button" data-step="upscale">
+              <span>
+                <strong>清晰度增强</strong>
+                <small data-step-summary>2x 超分提高清晰度</small>
+              </span>
+            </button>
+            <button class="step-button" type="button" data-step="edit">
+              <span>
+                <strong>成片拼接</strong>
+                <small data-step-summary>本地合成完整 MP4</small>
+              </span>
+            </button>
+          </aside>
+
+          <form id="generateForm" class="panel editor-panel">
+            <div class="section-title">
+              <div>
+                <h2 id="stepTitle" tabindex="-1">视频生成</h2>
+                <p id="stepSubtitle"></p>
+              </div>
+              <span id="stepBadge">准备</span>
+            </div>
+
+            <div class="env-status-bar" id="envStatusBar" role="status" aria-live="polite">
+              <span class="env-status-dot" id="envStatusDot"></span>
+              <span id="envStatusText">环境未检测</span>
+              <button class="link-button" id="openEnvironmentTabButton" type="button">前往环境与安装</button>
+            </div>
+
+            <details class="field wide" data-section="summary">
+              <summary>使用建议</summary>
+              <div class="note" id="stepGoal"></div>
+            </details>
+
+            <div class="form-grid">
+              <label class="field wide hidden" data-section="modelChoice">
+                <span>当前使用模型</span>
+                <select id="modelSelector"></select>
+                <div class="model-capability-chips hidden" id="modelCapabilityChips" aria-label="当前模型能力"></div>
+                <small id="modelChoiceHint">会根据环境侦测自动推荐，也可以手动切换。</small>
+                <button class="secondary model-install-action hidden" id="videoModelInstallButton" type="button">一键下载/修复当前模型</button>
+                <div class="workflow-status" id="workflowStatus" role="status" aria-live="polite">等待拉取对应 ComfyUI workflow。</div>
+              </label>
+
+              <section class="field wide social-target-panel hidden" data-section="socialTarget" aria-label="社交平台交付目标">
+                <div class="social-target-head">
+                  <div>
+                    <strong>发布到哪里</strong>
+                    <small>平台会采用当前模型更稳定的生成画布，并单独显示最终交付分辨率。</small>
+                  </div>
+                  <a id="socialSpecLink" class="ghost-button" href="#" target="_blank" rel="noreferrer">查看平台规范</a>
+                </div>
+                <div class="social-target-controls">
+                  <label class="field" for="socialPlatformSelect">
+                    <span>平台与版式</span>
+                    <select id="socialPlatformSelect" name="social_target"></select>
+                  </label>
+                  <fieldset class="field">
+                    <legend>生成质量</legend>
+                    <div class="segmented" id="socialQualitySwitch"></div>
+                    <input id="socialQuality" name="social_quality" type="hidden" value="balanced" />
+                  </fieldset>
+                </div>
+                <div class="social-target-options">
+                  <label class="toggle-row" for="socialAutoTune">
+                    <input id="socialAutoTune" type="checkbox" checked />
+                    <span><strong>自动套用模型稳妥参数</strong><small>同步画布、帧数、FPS、步数和 H3/LTX 管线档。</small></span>
+                  </label>
+                  <label class="toggle-row" for="socialSafeZoneToggle">
+                    <input id="socialSafeZoneToggle" type="checkbox" checked />
+                    <span><strong>预览平台安全区</strong><small>人物脸部、字幕和品牌标识尽量留在中央区域。</small></span>
+                  </label>
+                </div>
+                <div class="social-recipe-readout" id="socialRecipeReadout" aria-live="polite">
+                  <div><small>模型生成</small><strong id="socialGenerationSize">等待选择模型</strong></div>
+                  <div><small>最终交付</small><strong id="socialDeliverySize">1080 x 1920 · 30 FPS</strong></div>
+                  <div><small>镜头长度</small><strong id="socialDurationText">约 5 秒</strong></div>
+                </div>
+                <p class="social-target-note" id="socialTargetNote"></p>
+              </section>
+
+              <label class="field wide" data-section="project">
+                <span>项目标签（可选）</span>
+                <input id="projectTag" name="project" type="text" maxlength="40" list="projectTagOptions" placeholder="例如 富家学生剧；留空则不分组" autocomplete="off" />
+                <datalist id="projectTagOptions"></datalist>
+                <small>同一项目的输出会归档到输出目录的同名子目录，最近任务也可按项目筛选。</small>
+              </label>
+
+              <label class="field wide" data-section="prompt">
+                <span>画面和镜头 Prompt</span>
+                <textarea id="prompt" name="prompt" rows="5" placeholder="描述主体、场景、光线、动作和镜头运动；支持中文或纯英文。"></textarea>
+                <small>平台不会自动填入场景。Prompt 越像完整分镜描述，视频越稳定。</small>
+              </label>
+
+              <label class="field wide" data-section="negative" data-parameter-detail>
+                <span>排除内容 Negative Prompt</span>
+                <textarea id="negative" name="negative" rows="3"></textarea>
+                <small>用来压住低质量、变形、水印、字幕、闪烁等问题。</small>
+              </label>
+
+              <section class="field wide video-unrestricted-panel hidden" data-section="unrestricted" aria-label="视频无限制模式">
+                <div class="adult-recipe-bar" id="videoAdultRecipes">
+                  <div class="adult-recipe-head">
+                    <strong>一键玩法</strong>
+                    <small id="videoAdultRecipeHint">点选后切 H3 / LTX 2.5、开无限制并套动作；有静帧玩法时也会同步图片侧。</small>
+                  </div>
+                  <div class="chip-groups" id="videoAdultRecipeChips"></div>
+                </div>
+                <div class="video-unrestricted-main">
+                  <label class="toggle-row" for="videoUnrestrictedToggle">
+                    <input id="videoUnrestrictedToggle" name="unrestricted" type="checkbox" />
+                    <span>
+                      <strong>无限制模式</strong>
+                      <small id="videoUnrestrictedStatus">当前视频模型没有已验证的兼容方案。</small>
+                    </span>
+                  </label>
+                  <label class="video-unrestricted-strength hidden" id="videoUnrestrictedStrengthField">
+                    <span>LoRA 强度</span>
+                    <div class="lora-strength-control">
+                      <input id="videoUnrestrictedStrengthRange" type="range" value="0.8" min="0" max="1.2" step="0.05" aria-label="视频无限制 LoRA 强度" />
+                      <input id="videoUnrestrictedStrength" name="unrestricted_strength" type="number" value="0.8" min="0" max="1.2" step="0.05" />
+                    </div>
+                    <small id="videoUnrestrictedStrengthHelp">推荐 0.60-0.95。</small>
+                  </label>
+                </div>
+
+                <label class="adult-content-attestation hidden" id="adultContentAttestation" for="adultContentAck">
+                  <input id="adultContentAck" name="adult_content_ack" type="checkbox" />
+                  <span>
+                    <strong>我确认所有人物均为明确的 21 岁以上成年人并自愿参与</strong>
+                    <small>我拥有参考素材和肖像授权；不用于未成年人、年龄含糊者、非自愿内容或未经授权的真人私密仿冒。内容仅在本地模型处理，云端模型会另行标明。</small>
+                  </span>
+                </label>
+
+                <div class="video-nsfw-extras secondary-accordion hidden" id="videoNsfwExtras">
+                  <details class="secondary-drawer" open>
+                    <summary><span>动作与强度</span><small>运动档位、场景与动作模板</small></summary>
+                    <div class="secondary-drawer-body">
+                      <fieldset class="field wide">
+                        <legend>运动强度</legend>
+                        <div class="segmented" id="videoMotionSwitch"></div>
+                        <input id="videoMotionPreset" name="video_motion" type="hidden" value="medium" />
+                      </fieldset>
+                      <fieldset class="field wide">
+                        <legend>视频场景 / 动作模板</legend>
+                        <div class="chip-groups" id="videoSceneChips"></div>
+                        <small>追加到 Prompt 末尾，可再手改。直给组对应 H3 / LTX 提示词；Wan 动作包在下方另选。</small>
+                      </fieldset>
+                    </div>
+                  </details>
+                  <details class="secondary-drawer">
+                    <summary><span>提示词与 LoRA</span><small>触发词和动作 LoRA</small></summary>
+                    <div class="secondary-drawer-body">
+                      <div class="image-setting-row">
+                        <label class="toggle-row" for="videoAutoInjectTrigger">
+                          <input id="videoAutoInjectTrigger" name="video_auto_inject_trigger" type="checkbox" checked />
+                          <span><strong>自动注入触发词</strong><small id="videoTriggerPreview">无</small></span>
+                        </label>
+                        <label class="toggle-row" for="videoAutoStripNegative">
+                          <input id="videoAutoStripNegative" name="video_auto_strip_negative" type="checkbox" checked />
+                          <span><strong>清理负面冲突词</strong></span>
+                        </label>
+                      </div>
+                      <label class="field" for="videoCustomTrigger">
+                        <span>自定义触发词</span>
+                        <input id="videoCustomTrigger" name="video_custom_trigger" type="text" maxlength="120" placeholder="例如 nsfwsks；可空" />
+                      </label>
+                      <label class="field" for="videoMotionLoraPack">
+                        <span>动作 LoRA 包</span>
+                        <select id="videoMotionLoraPack" name="video_motion_lora_pack"></select>
+                        <div class="chip-row" id="videoMotionLoraChips"></div>
+                        <small>叠加 High/Low 动作 LoRA，仅 Wan 图生视频生效。H3 / LTX 2.5 请用上方动作模板。</small>
+                      </label>
+                    </div>
+                  </details>
+                </div>
+
+                <div class="video-unrestricted-actions">
+                  <button class="secondary hidden" id="videoInstallUnrestrictedButton" type="button">准备社区附加包</button>
+                  <a class="ghost-button hidden" id="videoUnrestrictedSource" href="#" target="_blank" rel="noreferrer">查看方案来源</a>
+                </div>
+              </section>
+
+              <section class="field wide video-tools-block hidden" id="videoToolsBlock" data-section="videoTools" aria-label="视频微调">
+                <div class="video-tools-heading">
+                  <div><strong id="videoToolsTitle">输入视频</strong></div>
+                  <div class="video-tools-actions">
+                    <button class="secondary" id="videoExtractFrameButton" type="button">抽取中间帧</button>
+                    <button class="secondary hidden" id="videoExtractFrameToImageButton" type="button">送入图片工作室</button>
+                  </div>
+                </div>
+                <label class="field" for="videoInput" id="postVideoInputField">
+                  <span>手动选择处理源（可选）</span>
+                  <input id="videoInput" name="video" type="file" accept=".mp4,.mov,.mkv,.webm,.avi" />
+                  <small>留空时自动使用最近完成的视频；上传文件时优先处理上传内容。</small>
+                </label>
+                <div class="video-extract-preview hidden" id="videoExtractPreview"><p>抽帧结果会显示在这里。</p></div>
+                <label class="toggle-row video-temporal-stability" for="videoTemporalStability">
+                  <input id="videoTemporalStability" name="temporal_stability" type="checkbox" checked />
+                  <span><strong>生成前时序稳定</strong><small>自动加入防闪烁、身份漂移和前后帧不一致的负面词；需要闪烁特效时可关闭。</small></span>
+                </label>
+                <div class="video-tools-drawers secondary-accordion">
+                  <details class="secondary-drawer video-tool-drawer video-tune-tools" open>
+                    <summary><span>视频微调</span><small>闪烁、亮度、色彩和锐度</small></summary>
+                    <div class="secondary-drawer-body">
+                    <label class="field" for="videoTuneFlickerPreset">
+                      <span>时序闪烁修复</span>
+                      <select id="videoTuneFlickerPreset">
+                        <option value="off">关闭</option>
+                        <option value="light">轻度</option>
+                        <option value="balanced" selected>均衡</option>
+                        <option value="strong">强力</option>
+                      </select>
+                    </label>
+                    <div class="video-tune-values">
+                      <label class="field" for="videoTuneBrightness"><span>亮度</span><input id="videoTuneBrightness" type="number" min="-0.2" max="0.2" step="0.01" value="0" /></label>
+                      <label class="field" for="videoTuneContrast"><span>对比度</span><input id="videoTuneContrast" type="number" min="0.5" max="1.5" step="0.05" value="1" /></label>
+                      <label class="field" for="videoTuneSaturation"><span>饱和度</span><input id="videoTuneSaturation" type="number" min="0" max="2" step="0.05" value="1" /></label>
+                      <label class="field" for="videoTuneSharpness"><span>锐度</span><input id="videoTuneSharpness" type="number" min="0" max="1.5" step="0.05" value="0" /></label>
+                    </div>
+                    <button class="secondary" id="videoTuneSubmitButton" type="button">提交视频微调</button>
+                    <small>可降低曝光与轻微纹理闪烁；人物变形、物体漂移需要回到生成阶段缩短镜头或加强参考图约束。</small>
+                    </div>
+                  </details>
+                  <details class="secondary-drawer video-tool-drawer" id="batchVideoDrawer">
+                    <summary><span>批量任务</span><small>多张关键帧逐张生成</small></summary>
+                    <div class="secondary-drawer-body">
+                      <label class="field" for="batchKeyframeInput">
+                        <span>批量关键帧（I2V 逐张加入队列）</span>
+                        <input id="batchKeyframeInput" type="file" accept=".png,.jpg,.jpeg,.webp,.bmp" multiple />
+                        <small>选择多张图片后，每张都会创建独立视频任务。批量生成时建议关闭「生成后自动后期」，避免任务互相排队。</small>
+                      </label>
+                    </div>
+                  </details>
+                </div>
+              </section>
+
+              <label class="field wide" data-section="image">
+                <span id="keyframeInputLabel">关键帧图片（可选）</span>
+                <input id="imageInput" name="image" type="file" accept=".png,.jpg,.jpeg,.webp,.bmp" />
+                <small id="keyframeInputHelp">需要锁定人物、场景或构图时再上传；不上传会使用 T2V 文字生视频路线。</small>
+              </label>
+
+              <section class="field wide h3-tools hidden" id="h3Tools" aria-label="H3 创作工具">
+                <header class="h3-tools-head"><strong>H3 创作</strong><span>实验功能 · 待生成验证</span></header>
+                <div class="h3-tools-controls">
+                  <label class="field"><span>创作任务</span><select id="h3Task" aria-label="H3 创作任务"><option value="generate">普通生成</option><option value="control">动作 / 结构控制</option><option value="inpaint">局部重绘</option></select></label>
+                  <label class="h3-upscale-toggle"><input type="checkbox" id="h3LatentUpscale" />H3 潜空间超分</label>
+                </div>
+                <label class="field hidden" id="h3ControlField"><span>控制视频</span><input id="h3ControlVideo" name="h3_control_video" type="file" accept=".mp4,.mov,.mkv,.webm,.avi" disabled /><small>默认自动提取 Canny 边缘。姿态 / 深度等预处理视频可在高级参数里切换。</small></label>
+                <div class="h3-tools-controls hidden" id="h3InpaintFields">
+                  <label class="field"><span>原视频</span><input id="h3SourceVideo" name="h3_source_video" type="file" accept=".mp4,.mov,.mkv,.webm,.avi" disabled /></label>
+                  <label class="field"><span>黑白遮罩</span><input id="h3Mask" name="h3_mask" type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,.mp4,.mov,.mkv,.webm,.avi" disabled /><small>白色重绘，黑色保留。与原片同宽高；静态区域用图片，移动区域用逐帧遮罩视频。</small></label>
+                </div>
+                <output id="h3ResolutionSummary" aria-live="polite"></output>
+                <p id="h3ToolsStatus" role="status"></p>
+                <div class="h3-tools-actions"><button type="button" id="h3NativeBaseline" class="ghost-button">恢复原生质量基准</button><button type="button" id="h3InstallCreative" class="ghost-button">安装创作扩展</button></div>
+              </section>
+
+              <section class="field wide reference-media-panel hidden" data-section="referenceMedia" aria-label="MiniMax H3 多参考素材">
+                <div class="reference-media-head">
+                  <div><strong>多参考素材</strong><small>Ref2VA 可同时参考人物外观、动作镜头和声音。</small></div>
+                  <span id="referenceMediaCount">0 个素材</span>
+                </div>
+                <input id="referenceMediaInput" name="reference_media" type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,.mp4,.mov,.mkv,.webm,.avi,.wav,.mp3,.flac,.m4a,.aac,.ogg" multiple />
+                <div class="reference-media-list" id="referenceMediaList"><p>至少选择 1 个；最多 9 张图片、3 段视频、3 条音频。</p></div>
+                <small>Prompt 中用 <code>&lt;Picture 1&gt;</code>、<code>&lt;Video 1&gt;</code>、<code>&lt;Audio 1&gt;</code> 指定素材。编号分别按同类型文件的选择顺序计算。</small>
+              </section>
+
+              <label class="field wide hidden" data-section="endImage" id="endImageField">
+                <span>尾帧图片（可选）</span>
+                <input id="endImageInput" name="end_image" type="file" accept=".png,.jpg,.jpeg,.webp,.bmp" />
+                <small id="endImageHelp">当前模型支持首尾帧控制。上传后，画面会从关键帧开始并向这张尾帧过渡，适合转场和固定镜头落点。</small>
+              </label>
+
+              <div class="field wide" data-section="keyframePreview">
+                <span>关键帧预览</span>
+                <div class="preview-box" id="keyframePreview">
+                  <p>未上传关键帧，将使用文字生视频路线。</p>
+                </div>
+              </div>
+
+              <div class="field wide hidden" data-section="clips">
+                <span>按顺序选择视频片段</span>
+                <input id="clipsInput" name="clips" type="file" accept=".mp4,.mov,.mkv,.webm,.avi" multiple />
+                <div class="clip-order-list" id="stitchClipList" aria-live="polite">
+                  <p>至少选择 2 个片段。选择后可以调整顺序；上一阶段输出也会作为第一个片段加入。</p>
+                </div>
+                <small>平台会统一到当前画幅和 FPS，再用 ffmpeg 顺序合成 MP4。声音、转场、字幕和调色仍建议在剪辑软件中完成。</small>
+              </div>
+
+              <div class="field wide hidden" data-section="targetResolution">
+                <span>目标分辨率</span>
+                <div class="resolution-card">
+                  <div>
+                    <small>输入视频</small>
+                    <strong id="sourceResolutionText">1280 x 704</strong>
+                  </div>
+                  <div>
+                    <small id="targetResolutionLabel">2x 输出目标</small>
+                    <strong id="targetResolutionText">2560 x 1408</strong>
+                  </div>
+                </div>
+                <small id="targetResolutionNote">清晰度增强会按输入视频实际尺寸做 2x 超分，输出文件会更大。</small>
+              </div>
+
+              <fieldset class="field" data-section="size">
+                <legend>画幅和分辨率</legend>
+                <div class="segmented" id="sizePreset">
+                  <button type="button" class="active" data-width="1280" data-height="704">横屏 720P</button>
+                  <button type="button" data-width="704" data-height="1280">竖屏 720P</button>
+                </div>
+                <div class="inline-pair">
+                  <input id="width" name="width" type="number" value="1280" min="256" max="2048" step="32" />
+                  <input id="height" name="height" type="number" value="704" min="256" max="2048" step="32" />
+                </div>
+                <small id="sizeHelp">横屏适合宣传片和横版剪辑；竖屏适合短视频平台。数值越大，显存和时间越高。</small>
+              </fieldset>
+
+              <fieldset class="field" data-section="duration">
+                <legend>镜头时长</legend>
+                <div class="segmented" id="durationPreset">
+                  <button type="button" data-length="49">2 秒</button>
+                  <button type="button" class="active" data-length="81">3 秒</button>
+                  <button type="button" data-length="121">5 秒</button>
+                </div>
+                <input id="length" name="length" type="number" value="81" min="9" max="481" step="4" />
+                <small id="durationHelp">视频越长越吃显存，也更容易发生人物、物体或背景漂移。</small>
+              </fieldset>
+
+              <label class="field" data-section="fps" data-parameter-detail>
+                <span>帧率 FPS</span>
+                <input id="fps" name="fps" type="number" value="24" min="1" max="60" step="1" />
+                <small id="fpsHelp">不同模型会自动带入推荐帧率；插帧步骤可以进一步提高流畅度。</small>
+              </label>
+
+              <label class="field" data-section="steps" data-parameter-detail>
+                <span>采样步数 Steps</span>
+                <input id="steps" name="steps" type="number" value="20" min="1" max="80" step="1" />
+                <small>步数越高越慢。不同模型会带入推荐值，你仍可自由输入任意中间整数。</small>
+              </label>
+
+              <label class="field" data-section="cfg" data-parameter-detail>
+                <span>提示词强度 CFG</span>
+                <input id="cfg" name="cfg" type="number" value="5.0" min="0.1" max="20" step="0.1" />
+                <small id="cfgHelp">不同模型的 CFG 逻辑不同，切换模型会自动带入推荐值。</small>
+              </label>
+
+              <label class="field" data-section="seed" data-parameter-detail>
+                <span>随机种子 Seed</span>
+                <input id="seed" name="seed" type="number" value="-1" />
+                <small>-1 表示每次随机；填固定数字可以复现同一镜头，方便反复微调。</small>
+              </label>
+
+              <section class="field wide video-advanced-panel hidden" data-section="advanced" data-parameter-detail aria-label="工作流高级参数">
+                <details class="secondary-drawer" id="videoAdvancedDrawer">
+                  <summary>
+                    <span>工作流高级参数</span>
+                    <small id="videoAdvancedSummary">全部为默认值</small>
+                  </summary>
+                  <div class="secondary-drawer-body">
+                    <p class="video-advanced-intro" id="videoAdvancedIntro">
+                      下面这些旋钮直接对应当前模型工作流里的节点参数。不同模型能调的项不一样，切换模型会自动重新列出。不确定就保持默认。
+                    </p>
+                    <div id="videoAdvancedGroups"></div>
+                    <div class="video-advanced-actions">
+                      <button class="secondary" id="videoAdvancedReset" type="button">恢复该模型默认值</button>
+                    </div>
+                  </div>
+                </details>
+              </section>
+
+              <section class="field wide pipeline-panel hidden" data-section="pipeline" aria-label="生成后自动后期">
+                <div class="pipeline-head">
+                  <strong>生成后自动后期</strong>
+                  <small id="pipelineHint">勾选的步骤会在上一步成功后按顺序自动提交；任何一步失败会停下并保留日志。</small>
+                </div>
+                <div class="pipeline-toggles">
+                  <label class="pipeline-toggle" for="pipelineTune">
+                    <input id="pipelineTune" type="checkbox" />
+                    <span>视频微调<small>去闪烁</small></span>
+                  </label>
+                  <span class="pipeline-arrow" aria-hidden="true">→</span>
+                  <label class="pipeline-toggle" for="pipelineRife">
+                    <input id="pipelineRife" type="checkbox" />
+                    <span>RIFE 插帧<small>更顺滑</small></span>
+                  </label>
+                  <span class="pipeline-arrow" aria-hidden="true">→</span>
+                  <label class="pipeline-toggle" for="pipelineUpscale">
+                    <input id="pipelineUpscale" type="checkbox" />
+                    <span>清晰度增强<small>2x 超分</small></span>
+                  </label>
+                </div>
+              </section>
+            </div>
+
+            <input id="videoAdvancedInput" name="advanced" type="hidden" value="" />
+            <input id="mode" name="mode" type="hidden" value="" />
+            <input id="modelLabel" name="model_label" type="hidden" />
+            <input id="modelProfile" name="model_profile" type="hidden" />
+            <input id="upscaleModel" name="upscale_model" type="hidden" value="RealESRGAN_x2plus.pth" />
+            <input id="upscaleScale" name="upscale_scale" type="hidden" value="2" />
+            <input id="rifeMultiplier" name="rife_multiplier" type="hidden" value="2" />
+            <input id="sourceVideoFilename" name="source_video_filename" type="hidden" />
+            <input id="sourceVideoSubfolder" name="source_video_subfolder" type="hidden" />
+            <input id="sourceVideoType" name="source_video_type" type="hidden" />
+            <input id="sourceImageFilename" name="source_image_filename" type="hidden" />
+            <input id="sourceImagePreviewUrl" type="hidden" />
+            <input id="sourceImageLabel" type="hidden" />
+
+            <div class="actions action-bar" id="workflowActionBar">
+              <div class="action-bar-secondary">
+                <button class="secondary" id="validateButton" type="button">检查配置</button>
+                <button class="ghost-button" id="copyPromptButton" type="button" title="复制当前画面和镜头提示词">复制提示词</button>
+                <button class="ghost-button" id="newWorkflowShot" type="button">新镜头</button>
+              </div>
+              <div class="action-bar-primary">
+                <button class="secondary" id="backButton" type="button">上一步</button>
+                <button class="primary" id="primaryButton" type="button">确认关键帧，进入视频生成</button>
+              </div>
+            </div>
+          </form>
+
+          <section class="panel result-panel">
+            <div class="section-title">
+              <div>
+                <h2>预览与结果</h2>
+                <p id="resultHint">暂无生成结果。</p>
+              </div>
+              <span id="jobStatus" role="status" aria-live="polite">空闲</span>
+            </div>
+            <div class="job-meta" id="jobMeta">
+              <span>等待操作</span>
+            </div>
+            <div class="video-progress-head">
+              <strong id="videoProgressLabel">等待任务</strong>
+              <span id="videoProgressPercent">0%</span>
+            </div>
+            <div class="progress-shell" id="videoProgressShell" role="progressbar" aria-label="视频任务进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div class="video-task-queue" aria-label="正在进行的视频任务">
+              <div class="video-task-queue-head"><strong>任务队列</strong><span id="videoTaskQueueCount">0 个进行中</span></div>
+              <div class="video-task-queue-list" id="videoTaskQueueList"><p>没有正在进行的任务。</p></div>
+            </div>
+            <div class="monitor">
+              <div class="monitor-bar">
+                <span>Preview</span>
+                <i></i>
+              </div>
+              <div class="result-view" id="resultView">
+                <p>输出视频会显示在这里。</p>
+              </div>
+            </div>
+            <div class="next-row next-row-primary">
+              <button class="primary hidden" id="continueButton" type="button">处理这个视频</button>
+              <button class="secondary hidden" id="repeatButton" type="button">再次运行</button>
+              <button class="secondary danger hidden" id="videoCancelJobButton" type="button">中断当前任务</button>
+            </div>
+            <section class="result-actions hidden" id="resultActions" aria-label="继续处理当前结果" tabindex="-1">
+              <strong>继续处理</strong>
+              <p id="resultActionSource"></p>
+              <div class="result-action-buttons">
+                <button class="secondary" type="button" data-result-step="deflicker">修复与调色</button>
+                <button class="secondary" type="button" data-result-step="rife">流畅度增强</button>
+                <button class="secondary" type="button" data-result-step="upscale">清晰度增强</button>
+                <button class="secondary" type="button" data-result-step="edit">加入拼接</button>
+              </div>
+            </section>
+            <div class="tool-row">
+              <span class="tool-row-label">诊断与工具</span>
+              <div class="tool-row-actions">
+                <button class="ghost-button" id="copyDiagnosticsButton" type="button">复制诊断信息</button>
+                <button class="ghost-button" id="downloadDiagnosticsButton" type="button">下载诊断包</button>
+                <button class="ghost-button" id="clearLogButton" type="button" title="清空下方日志">清空日志</button>
+              </div>
+            </div>
+            <div class="log-box" id="logBox" role="log" aria-live="polite"></div>
+            <div class="output-manager-entry">
+              <button class="secondary" id="openOutputManagerButton" type="button">查看作品</button>
+              <button class="secondary" id="openTaskManagerButton" type="button">查看全部任务</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view hidden" data-view="tasks" aria-label="任务中心">
+        <header class="workspace-section-head"><h2>任务</h2><span id="taskCountSummary" role="status">读取中</span></header>
+        <div class="task-workspace">
+            <div class="recent-jobs">
+              <div class="recent-jobs-head">
+                <span>最近任务</span>
+                <div class="recent-jobs-controls">
+                  <div class="recent-jobs-filter" id="recentJobsFilter" role="group" aria-label="任务筛选">
+                    <button type="button" class="active" data-filter="all">全部</button>
+                    <button type="button" data-filter="active">进行中</button>
+                    <button type="button" data-filter="success">成功</button>
+                    <button type="button" data-filter="failed">失败</button>
+                    <button type="button" data-filter="video">视频</button>
+                  </div>
+                  <select id="recentJobsProjectFilter" class="recent-jobs-project-filter hidden" aria-label="按项目筛选">
+                    <option value="">全部项目</option>
+                  </select>
+                  <button class="ghost-button" id="recentJobsRefreshButton" type="button" title="刷新任务列表">刷新</button>
+                </div>
+              </div>
+              <div class="recent-jobs-list" id="recentJobsList" role="list" aria-live="polite">
+                <p class="recent-jobs-empty">暂无任务记录。</p>
+              </div>
+              <button class="ghost-button recent-jobs-more hidden" id="recentJobsMoreButton" type="button">加载更多</button>
+            </div>
+
+          <section class="task-preview" aria-label="任务详情">
+            <h3 id="taskPreviewTitle">选择一个任务</h3>
+            <div id="taskPreviewMedia" class="result-view"><p>暂无选中的任务。</p></div>
+            <pre id="taskPreviewDetail"></pre>
+            <div class="workflow-context-actions">
+              <button class="secondary hidden" id="taskUseVideo" type="button">用于视频后期</button>
+              <button class="secondary danger hidden" id="taskCancel" type="button">取消此任务</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view view-image-studio hidden" data-view="image-studio" aria-label="图片生成工作室">
+        <div class="image-studio-layout">
+          <div class="image-studio-workspace">
+            <form class="panel image-studio-controls secondary-accordion" id="imageStudioForm">
+            <div class="section-title image-studio-title">
+              <div>
+                <h2>图片生成工作室</h2>
+                <p>文字生成与已有图片微调 · 中文输入与多模型档位</p>
+              </div>
+              <span id="imageStudioBadge">检查中</span>
+            </div>
+
+            <fieldset class="image-task-mode-field">
+              <legend>工作方式</legend>
+              <div class="segmented image-task-mode-switch" id="imageTaskModeSwitch">
+                <button class="active" type="button" data-image-task-mode="t2i">文字生成</button>
+                <button type="button" data-image-task-mode="edit">已有图片微调</button>
+              </div>
+              <input id="imageEditMode" name="edit_mode" type="hidden" value="false" />
+              <small id="imageTaskModeNote">只使用文字描述创建一张新图片。</small>
+            </fieldset>
+
+            <div class="image-model-bar" id="imageModelBar">
+              <label class="field">
+                <span>图片模型</span>
+                <select id="imageProfile" name="profile" aria-label="图片生成模型"></select>
+              </label>
+              <div class="image-model-actions">
+                <button class="secondary" id="imageSourceButton" type="button">下载源设置</button>
+                <button class="secondary" id="imageRefreshButton" type="button">重新检查</button>
+                <button class="primary" id="imageInstallButton" type="button">下载缺失模型</button>
+              </div>
+            </div>
+            <div class="workflow-status pending" id="imageModelStatus" role="status" aria-live="polite">正在检查模型与工作流。</div>
+
+            <section class="image-profile-details" id="imageProfileDetails" aria-label="当前模型兼容信息">
+              <div class="image-profile-heading">
+                <div>
+                  <strong id="imageProfileName">读取模型信息</strong>
+                  <small id="imageProfileDescription">正在同步模型目录与 ComfyUI 节点。</small>
+                </div>
+                <div class="image-profile-tags" id="imageProfileTags"></div>
+              </div>
+              <dl class="image-profile-facts" id="imageProfileFacts"></dl>
+              <div class="image-profile-support">
+                <span id="imageCompatibilityNote">兼容性检查中。</span>
+                <a id="imageWorkflowLink" href="#" target="_blank" rel="noreferrer">官方工作流</a>
+              </div>
+            </section>
+
+            <section class="image-edit-panel hidden" id="imageEditPanel" aria-label="已有图片微调设置">
+              <fieldset class="image-edit-operation-field">
+                <legend>微调方式</legend>
+                <div class="segmented image-edit-operation-switch" id="imageEditOperationSwitch">
+                  <button class="active" type="button" data-image-edit-operation="instruction">提示词重绘</button>
+                  <button type="button" data-image-edit-operation="face_swap">换脸</button>
+                </div>
+                <input id="imageEditOperation" name="edit_operation" type="hidden" value="instruction" />
+                <small id="imageEditOperationNote">按编辑要求重绘源图片，并控制对原图的遵循程度。</small>
+              </fieldset>
+              <div class="image-edit-head">
+                <div>
+                  <strong id="imageEditSourceTitle">源图片</strong>
+                  <small id="imageEditMethodNote">选择一张图片后开始微调。</small>
+                </div>
+                <button class="ghost-button hidden" id="imageEditClearButton" type="button">移除目标图</button>
+              </div>
+              <div class="image-edit-source-row">
+                <label class="image-edit-picker" for="imageEditFile">
+                  <input id="imageEditFile" name="source_image" type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,image/png,image/jpeg,image/webp,image/bmp" />
+                  <strong>选择本机图片</strong>
+                  <small>PNG、JPG、WEBP 或 BMP</small>
+                </label>
+                <div class="image-edit-preview" id="imageEditPreview">
+                  <p>也可以在下方“最近生成”中点击“微调”。</p>
+                </div>
+              </div>
+              <input id="imageEditSourceFilename" name="source_image_filename" type="hidden" value="" />
+              <input id="imageEditSourceSubfolder" name="source_image_subfolder" type="hidden" value="" />
+              <input id="imageEditSourceType" name="source_image_type" type="hidden" value="" />
+              <input id="imageSourceProcessing" name="source_processing" type="hidden" value="full" />
+              <input id="imageFaceCropMode" name="face_crop_mode" type="hidden" value="face" />
+
+              <div class="image-instruction-edit-settings" id="imageInstructionEditSettings">
+                <section class="image-reference-panel hidden" id="imageReferencePanel" aria-label="附加参考图片">
+                  <div class="image-reference-head">
+                    <div>
+                      <strong>附加参考图</strong>
+                      <small id="imageReferenceHint">目标图是 &lt;image1&gt;；可添加人物、产品、风格或构图参考。</small>
+                    </div>
+                    <button class="ghost-button hidden" id="imageReferenceClearButton" type="button">清空参考图</button>
+                  </div>
+                  <label class="image-reference-picker" for="imageReferenceFiles">
+                    <input id="imageReferenceFiles" name="reference_images" type="file" multiple accept=".png,.jpg,.jpeg,.webp,.bmp,image/png,image/jpeg,image/webp,image/bmp" />
+                    <strong>选择多张参考图</strong>
+                    <small>按选择顺序对应 &lt;image2&gt;、&lt;image3&gt;……</small>
+                  </label>
+                  <div class="image-reference-summary" id="imageReferenceSummary">尚未添加附加参考图。</div>
+                  <div class="image-reference-list" id="imageReferenceList"></div>
+                </section>
+                <div class="image-edit-settings">
+                  <label class="toggle-row image-edit-follow" for="imageEditFollowSize">
+                    <input id="imageEditFollowSize" type="checkbox" checked />
+                    <span><strong>跟随原图尺寸</strong><small>读取图片宽高并按当前模型上限等比适配。</small></span>
+                  </label>
+                  <label class="field" id="imageEditResizeField" for="imageEditResizeMode">
+                    <span>尺寸不同时</span>
+                    <select id="imageEditResizeMode" name="edit_resize_mode">
+                      <option value="crop">居中裁剪，不拉伸</option>
+                      <option value="stretch">拉伸到目标尺寸</option>
+                    </select>
+                  </label>
+                  <label class="field image-edit-strength-field" id="imageEditStrengthField">
+                    <span>原图遵循度</span>
+                    <div class="image-edit-strength-control">
+                      <input id="imageEditStrengthRange" type="range" min="0.05" max="0.95" step="0.01" value="0.65" aria-label="原图遵循度" />
+                      <input id="imageEditStrength" name="source_adherence" type="number" min="0.05" max="0.95" step="0.01" value="0.65" />
+                    </div>
+                  </label>
+                </div>
+                <small class="image-edit-strength-help" id="imageEditStrengthHelp">数值越高，未要求修改的内容越接近原图。</small>
+                <fieldset class="field wide image-edit-strength-preset-inline">
+                  <legend>编辑强度档位</legend>
+                  <div class="segmented" id="imageEditStrengthInlineSwitch"></div>
+                  <small>柔和 / 标准 / 强烈；与无限制面板中的预设联动。</small>
+                </fieldset>
+                <div class="workflow-status pending image-edit-adherence-status" id="imageEditAdherenceStatus" role="status" aria-live="polite">正在读取当前模型的原图遵循方式。</div>
+              </div>
+
+              <section class="image-face-options secondary-accordion hidden" id="imageFaceOptions" aria-label="换脸设置">
+                <div class="image-face-engine-head">
+                  <div>
+                    <strong>ReActor 本地换脸</strong>
+                    <small id="imageFaceEngineNote">正在检查节点与模型。</small>
+                  </div>
+                  <div class="image-face-engine-actions">
+                    <a id="imageFaceEngineSource" href="https://github.com/Gourieff/ComfyUI-ReActor" target="_blank" rel="noreferrer">项目来源</a>
+                    <button class="secondary" id="imageFaceInstallButton" type="button">准备换脸组件</button>
+                  </div>
+                </div>
+                <div class="workflow-status pending" id="imageFaceStatus" role="status" aria-live="polite">等待换脸组件检查。</div>
+                <div class="image-face-preservation-note">
+                  <strong>目标图如何保留</strong>
+                  <span>完整目标图直接送入换脸节点，不经过扩散重绘；只有选中的目标脸会被替换，其他区域保持目标图原始像素。</span>
+                </div>
+                <details class="secondary-drawer image-face-drawer">
+                  <summary><span>批量处理</span><small>同一身份参考图处理多张目标图</small></summary>
+                  <div class="secondary-drawer-body image-face-batch-panel" aria-label="批量换脸">
+                    <label class="image-edit-picker compact" for="imageFaceBatchTargets">
+                      <input id="imageFaceBatchTargets" type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,image/png,image/jpeg,image/webp,image/bmp" multiple />
+                      <strong>选择多张目标图</strong>
+                      <small id="imageFaceBatchSummary">尚未选择批量目标图。</small>
+                    </label>
+                    <button class="secondary" id="imageFaceBatchSubmitButton" type="button" disabled>确认授权并批量提交</button>
+                    <div class="image-face-batch-status hidden" id="imageFaceBatchStatus" role="status" aria-live="polite"></div>
+                  </div>
+                </details>
+                <details class="secondary-drawer image-face-drawer" open>
+                  <summary><span>人脸选择</span><small>目标脸与身份参考图</small></summary>
+                  <div class="secondary-drawer-body">
+                    <div class="image-face-pair-grid">
+                      <section class="image-face-side" aria-label="目标图面部">
+                        <div class="image-face-side-head">
+                          <div><strong>目标脸</strong><small>在目标图中选择要替换的人脸</small></div>
+                          <button class="secondary" id="imageFaceRetryButton" type="button">检测目标图</button>
+                        </div>
+                        <div class="image-face-candidates" id="imageFaceCandidates" role="list" aria-label="目标图检测到的面部">
+                          <p>等待检测目标图。</p>
+                        </div>
+                      </section>
+                      <section class="image-face-side" aria-label="身份参考图面部">
+                        <div class="image-face-side-head">
+                          <div><strong>身份参考</strong><small>提取另一张图片中要使用的人脸</small></div>
+                          <button class="secondary" id="imageIdentityFaceRetryButton" type="button">检测参考图</button>
+                        </div>
+                        <div class="image-identity-source-row">
+                          <label class="image-edit-picker compact" for="imageIdentityFaceFile">
+                            <input id="imageIdentityFaceFile" type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,image/png,image/jpeg,image/webp,image/bmp" />
+                            <strong>选择身份参考图</strong>
+                            <small>PNG、JPG、WEBP 或 BMP</small>
+                          </label>
+                          <div class="image-edit-preview compact" id="imageIdentityFacePreview"><p>尚未选择身份参考图。</p></div>
+                        </div>
+                        <button class="ghost-button hidden" id="imageIdentityFaceClearButton" type="button">移除身份参考图</button>
+                        <div class="image-face-candidates" id="imageIdentityFaceCandidates" role="list" aria-label="身份参考图检测到的面部">
+                          <p>等待检测身份参考图。</p>
+                        </div>
+                      </section>
+                    </div>
+                    <button class="primary image-face-analyze" id="imageFaceAnalyzeButton" type="button">确认授权并检测双方</button>
+                  </div>
+                </details>
+                <details class="secondary-drawer image-face-drawer">
+                  <summary><span>融合与修复</span><small>身份强度、面部修复和融合度</small></summary>
+                  <div class="secondary-drawer-body">
+                    <div class="image-face-controls">
+                      <fieldset class="field wide">
+                        <legend>身份强度预设</legend>
+                        <div class="chip-row" id="imageFaceStrengthPresets"></div>
+                        <small>预设来自玩法配置，仍可用下方滑条覆盖。</small>
+                      </fieldset>
+                      <label class="field" for="imageFaceSwapStrength">
+                        <span>身份替换强度</span>
+                        <div class="image-edit-strength-control">
+                          <input id="imageFaceSwapStrengthRange" type="range" min="0" max="100" step="12.5" value="100" aria-label="身份替换强度" />
+                          <input id="imageFaceSwapStrength" type="number" min="0" max="100" step="12.5" value="100" />
+                        </div>
+                        <small>按 ReActor 支持的档位自动吸附；100% 使用身份参考，较低数值会混合目标脸特征。</small>
+                      </label>
+                      <label class="field" for="imageFaceRestoreModel">
+                        <span>面部修复</span>
+                        <select id="imageFaceRestoreModel"><option value="none">不额外修复</option></select>
+                      </label>
+                      <label class="field" for="imageFaceRestoreVisibility">
+                        <span>修复融合度</span>
+                        <input id="imageFaceRestoreVisibility" type="number" min="0.1" max="1" step="0.05" value="0.8" />
+                        <small id="imageFaceRestoreNote">选择面部修复模型后生效。</small>
+                      </label>
+                    </div>
+                    <small class="image-face-license" id="imageFaceLicenseNote"></small>
+                  </div>
+                </details>
+              </section>
+              <input id="imageFaceAuthorization" type="hidden" value="false" />
+              <input id="imageFaceExtractId" type="hidden" value="" />
+              <input id="imageFaceIndex" type="hidden" value="-1" />
+              <input id="imageIdentityFaceExtractId" type="hidden" value="" />
+              <input id="imageIdentityFaceIndex" type="hidden" value="-1" />
+            </section>
+
+            <details class="image-install-panel secondary-drawer" id="imageInstallPanel" aria-label="模型下载设置">
+              <summary class="image-install-head">
+                <div>
+                  <strong>模型文件与下载位置</strong>
+                  <small id="imageStorageNote">路径、容量和下载进度</small>
+                </div>
+                <span id="imageInstallState">模型下载：未开始</span>
+              </summary>
+              <div class="secondary-drawer-body">
+                <div class="image-storage-row">
+                  <label class="field" for="imageStoragePreset">
+                    <span>位置</span>
+                    <select id="imageStoragePreset"></select>
+                  </label>
+                  <label class="field" for="imageDownloadPath">
+                    <span>下载路径</span>
+                    <input id="imageDownloadPath" type="text" autocomplete="off" spellcheck="false" />
+                  </label>
+                </div>
+                <div class="image-install-progress hidden" id="imageInstallProgress">
+                  <div class="image-install-summary">
+                    <strong id="imageInstallSummary">等待下载</strong>
+                    <span id="imageInstallMetrics"></span>
+                  </div>
+                  <div class="progress-shell"><div class="progress-bar" id="imageInstallProgressBar"></div></div>
+                  <div class="image-install-file-list" id="imageInstallFiles"></div>
+                  <div class="image-install-controls">
+                    <button class="secondary" id="imagePauseInstallButton" type="button">暂停</button>
+                    <button class="secondary hidden" id="imageResumeInstallButton" type="button">继续</button>
+                    <button class="secondary" id="imageCancelInstallButton" type="button">取消</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <section class="image-nsfw-panel" id="imageNsfwPanel" aria-label="无限制模式社区方案">
+              <div class="adult-recipe-bar" id="imageAdultRecipes">
+                <div class="adult-recipe-head">
+                  <strong>一键玩法</strong>
+                  <small id="imageAdultRecipeHint">点选后自动开无限制、切模型、填场景。「套用并出视频」会在静帧成功后自动排队图生视频。</small>
+                </div>
+                <div class="chip-groups" id="imageAdultRecipeChips"></div>
+                <div class="adult-recipe-actions">
+                  <button class="secondary" id="imageAdultApplyGenerateButton" type="button">套用并生成静帧</button>
+                  <button class="primary" id="imageAdultApplyVideoButton" type="button">套用并出视频</button>
+                </div>
+              </div>
+              <label class="toggle-row" for="imageNsfwToggle">
+                <input id="imageNsfwToggle" name="nsfw" type="checkbox" value="true" />
+                <span>
+                  <strong>无限制模式</strong>
+                  <small id="imageNsfwStatus">正在检查当前模型的社区方案。</small>
+                </span>
+              </label>
+
+              <div class="image-nsfw-extras secondary-accordion hidden" id="imageNsfwExtras">
+                <details class="secondary-drawer" open>
+                  <summary><span>向导与强度</span><small>玩法、档位、LoRA 和场景模板</small></summary>
+                  <div class="secondary-drawer-body">
+                    <label class="field" for="imageNsfwWizard">
+                      <span>玩法向导</span>
+                      <select id="imageNsfwWizard"></select>
+                      <small>与上方一键玩法同步；仍可再改场景、风格、强度。</small>
+                    </label>
+                    <fieldset class="field wide">
+                      <legend>强度档位</legend>
+                      <div class="segmented" id="imageNsfwIntensitySwitch"></div>
+                      <input id="imageNsfwIntensity" name="nsfw_intensity" type="hidden" value="medium" />
+                    </fieldset>
+                    <label class="field image-nsfw-strength hidden" id="imageNsfwStrengthField">
+                      <span>社区 LoRA 强度（可覆盖档位）</span>
+                      <div class="lora-strength-control">
+                        <input id="imageNsfwStrengthRange" type="range" min="0" max="1.4" step="0.05" value="0.85" aria-label="图片生成社区 LoRA 强度" />
+                        <input id="imageNsfwStrength" name="nsfw_lora_strength" type="number" min="0" max="1.4" step="0.05" value="0.85" />
+                      </div>
+                      <small id="imageNsfwStrengthHelp">推荐值会随模型自动调整。</small>
+                    </label>
+                    <fieldset class="field wide">
+                      <legend>场景模板</legend>
+                      <div class="chip-groups" id="imageNsfwScenes"></div>
+                      <small>点击填入提示词；私密/双人组会整段替换，摄影组可叠加。</small>
+                    </fieldset>
+                  </div>
+                </details>
+
+                <details class="secondary-drawer">
+                  <summary><span>提示词与 LoRA</span><small>触发词、扩写、对比和第二 LoRA</small></summary>
+                  <div class="secondary-drawer-body">
+                    <div class="image-setting-row">
+                      <label class="toggle-row" for="imageAutoInjectTrigger">
+                        <input id="imageAutoInjectTrigger" name="auto_inject_trigger" type="checkbox" value="true" checked />
+                        <span><strong>自动注入触发词</strong><small id="imageTriggerPreview">无</small></span>
+                      </label>
+                      <label class="toggle-row" for="imageAutoStripNegative">
+                        <input id="imageAutoStripNegative" name="auto_strip_negative" type="checkbox" value="true" checked />
+                        <span><strong>清理负面冲突词</strong><small>可在玩法配置里改词表</small></span>
+                      </label>
+                    </div>
+                    <label class="field" for="imageCustomTrigger">
+                      <span>自定义触发词（可空）</span>
+                      <input id="imageCustomTrigger" name="custom_trigger" type="text" maxlength="120" placeholder="覆盖模型默认触发词；留空用模型配置" />
+                    </label>
+                    <div class="image-setting-row">
+                      <label class="toggle-row" for="imageTripleCompare">
+                        <input id="imageTripleCompare" name="triple_compare" type="checkbox" value="true" />
+                        <span><strong>三联对比</strong><small>同种子输出 SFW / 无限制 / 双开 三张。</small></span>
+                      </label>
+                      <label class="toggle-row" for="imagePromptExpand">
+                        <input id="imagePromptExpand" name="prompt_expand" type="checkbox" value="true" />
+                        <span><strong>提示词扩写</strong><small>按风格模板自动扩写 Prompt。</small></span>
+                      </label>
+                    </div>
+                    <div class="image-nsfw-secondary-lora image-setting-row">
+                      <label class="field" for="imageSecondaryLoraName">
+                        <span>第二 LoRA 名称</span>
+                        <input id="imageSecondaryLoraName" name="secondary_lora_name" type="text" maxlength="200" placeholder="safetensors 文件名；可空" />
+                      </label>
+                      <label class="field" for="imageSecondaryLoraStrength">
+                        <span>第二 LoRA 强度</span>
+                        <input id="imageSecondaryLoraStrength" name="secondary_lora_strength" type="number" min="0" max="2" step="0.05" value="0.8" />
+                      </label>
+                    </div>
+                  </div>
+                </details>
+
+                <details class="secondary-drawer">
+                  <summary><span>区域与姿态</span><small>分区提示词、ControlNet 和编辑强度</small></summary>
+                  <div class="secondary-drawer-body">
+                    <fieldset class="field wide image-regional-panel" id="imageRegionalPanel">
+                      <legend>分区提示词</legend>
+                      <label class="field wide" for="imageRegionalFacePrompt">
+                        <span>面部区域</span>
+                        <textarea id="imageRegionalFacePrompt" name="regional_face_prompt" rows="2" placeholder="仅作用于面部的描述；可空"></textarea>
+                      </label>
+                      <label class="field wide" for="imageRegionalBodyPrompt">
+                        <span>身体区域</span>
+                        <textarea id="imageRegionalBodyPrompt" name="regional_body_prompt" rows="2" placeholder="身体/背景区域的描述；可空"></textarea>
+                      </label>
+                      <small id="imageRegionalStatus">需 ConditioningSetArea 节点；可在进阶模块中启用「分区提示词」。</small>
+                    </fieldset>
+                    <fieldset class="field wide image-pose-control-panel" id="imagePoseControlPanel">
+                      <legend>姿态 ControlNet</legend>
+                      <label class="field" for="imagePoseMapFile">
+                        <span>OpenPose 姿态图</span>
+                        <input id="imagePoseMapFile" type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,image/png,image/jpeg,image/webp,image/bmp" />
+                        <input id="imagePoseMapFilename" name="pose_map_filename" type="hidden" value="" />
+                        <small id="imagePoseMapStatus">选择后会上传到 ComfyUI input；需 ControlNet 模型。</small>
+                      </label>
+                      <div class="image-setting-row">
+                        <label class="field" for="imageControlnetName">
+                          <span>ControlNet 模型</span>
+                          <select id="imageControlnetName" name="controlnet_name"></select>
+                        </label>
+                        <label class="field" for="imageControlnetStrength">
+                          <span>ControlNet 强度</span>
+                          <input id="imageControlnetStrength" name="controlnet_strength" type="number" min="0" max="2" step="0.05" value="0.7" />
+                        </label>
+                      </div>
+                    </fieldset>
+                    <fieldset class="field wide image-edit-strength-preset-field hidden" id="imageEditStrengthPresetField">
+                      <legend>编辑强度预设</legend>
+                      <div class="segmented" id="imageEditStrengthSwitch"></div>
+                      <input id="imageEditStrengthPreset" name="edit_strength_preset" type="hidden" value="" />
+                      <small>仅图片微调模式生效；会覆盖下方原图遵循度滑条对应的编辑幅度。</small>
+                    </fieldset>
+                  </div>
+                </details>
+
+                <details class="image-advanced-modules secondary-drawer" id="imageAdvancedModules">
+                  <summary>
+                    <span>进阶模块状态</span>
+                    <small id="imageAdvancedModulesSummary">查看</small>
+                  </summary>
+                  <div class="secondary-drawer-body">
+                    <div class="chip-row" id="imageAdvancedModuleList"></div>
+                    <small>仅显示当前可实际生效或可安装的模块；规划中的不会假装可开关。</small>
+                  </div>
+                </details>
+              </div>
+
+              <div class="image-nsfw-actions">
+                <button class="secondary hidden" id="imageInstallNsfwButton" type="button">下载社区方案</button>
+                <a class="image-nsfw-source hidden" id="imageNsfwSource" href="#" target="_blank" rel="noreferrer">社区来源</a>
+              </div>
+            </section>
+
+            <details class="image-character-panel secondary-drawer" id="imageCharacterPanel" aria-label="角色盒">
+              <summary class="image-character-panel-head">
+                <div>
+                  <strong>角色盒（换脸 / 视频共用）</strong>
+                  <small id="imageCharacterBoxSummary">0 个</small>
+                </div>
+                <span id="imageCharacterBoxStatus" role="status" aria-live="polite"></span>
+              </summary>
+              <div class="secondary-drawer-body">
+                <div class="chip-row" id="imageCharacterBoxList"></div>
+                <div class="image-character-ingest">
+                  <label class="image-edit-picker compact" for="imageCharacterIdentityFile">
+                    <input id="imageCharacterIdentityFile" type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,image/png,image/jpeg,image/webp,image/bmp" />
+                    <strong>导入身份参考图</strong>
+                    <small>先选图，再提取并入库</small>
+                  </label>
+                  <div class="image-edit-preview compact" id="imageCharacterIdentityPreview"><p>尚未选择身份参考图。</p></div>
+                </div>
+                <div class="image-rejection-actions">
+                  <button class="secondary" id="imageCharacterExtractButton" type="button">提取身份脸</button>
+                  <button class="secondary" id="imageCharacterSaveButton" type="button">存入角色盒</button>
+                  <button class="ghost-button" id="imageCharacterUseFaceSwapButton" type="button">去换脸面板</button>
+                  <button class="ghost-button" id="imageCharacterClearButton" type="button">清空角色盒</button>
+                </div>
+                <small>提取会完成本地人脸检测；选中角色可回填到换脸身份脸。视频侧可读取同一角色盒。</small>
+              </div>
+            </details>
+
+            <div class="image-prompt-section secondary-accordion" id="imagePromptSection">
+              <label class="field wide" for="imagePrompt">
+                <span id="imagePromptLabel">画面描述</span>
+                <textarea id="imagePrompt" name="prompt" rows="7" maxlength="5000"></textarea>
+                <small><span id="imagePromptCount">0</span> / 5000</small>
+              </label>
+
+              <fieldset class="field wide image-prompt-mode">
+                <legend>提示词处理</legend>
+                <div class="image-mode-switch" id="imagePromptModes"></div>
+              </fieldset>
+
+              <label class="field wide" for="imageExactText">
+                <span>画面文字（可选）</span>
+                <input id="imageExactText" name="exact_text" type="text" maxlength="500" placeholder="需要在画面中逐字出现的文字" />
+              </label>
+
+              <div class="image-setting-row">
+                <label class="field" for="imageStylePreset">
+                  <span>风格</span>
+                  <select id="imageStylePreset" name="style_preset"></select>
+                </label>
+                <fieldset class="field image-batch-field">
+                  <legend>生成张数</legend>
+                  <div class="image-batch-controls">
+                    <div class="segmented image-batch-switch" id="imageBatchSwitch">
+                      <button type="button" class="active" data-batch="1">1</button>
+                      <button type="button" data-batch="2">2</button>
+                      <button type="button" data-batch="4">4</button>
+                    </div>
+                    <label class="image-batch-custom" for="imageBatchSize">
+                      <span>自定义</span>
+                      <input id="imageBatchSize" name="batch_size" type="number" inputmode="numeric" min="1" max="20" step="1" value="1" />
+                    </label>
+                  </div>
+                </fieldset>
+              </div>
+
+              <fieldset class="field wide image-generation-mode-field">
+                <legend>出图方式</legend>
+                <div class="segmented image-generation-mode-switch" id="imageGenerationModeSwitch">
+                  <button type="button" class="active" data-generation-mode="batch">整批生成</button>
+                  <button type="button" data-generation-mode="sequential">逐张出图</button>
+                </div>
+                <input id="imageGenerationMode" name="generation_mode" type="hidden" value="batch" />
+                <small id="imageBatchModeNote">整批生成会在一次工作流中输出全部图片。</small>
+              </fieldset>
+
+              <fieldset class="field wide image-aspect-field">
+                <legend>画幅和分辨率</legend>
+                <div class="image-aspect-grid" id="imageAspectGrid"></div>
+                <input id="imageAspect" name="aspect" type="hidden" value="landscape" />
+                <div class="image-custom-size">
+                  <label class="field" for="imageWidth">
+                    <span>宽度</span>
+                    <input id="imageWidth" name="width" type="number" inputmode="numeric" min="512" max="3104" step="16" value="1664" />
+                  </label>
+                  <button class="secondary image-swap-size" id="imageSwapSizeButton" type="button" title="交换宽度和高度" aria-label="交换宽度和高度">↔</button>
+                  <label class="field" for="imageHeight">
+                    <span>高度</span>
+                    <input id="imageHeight" name="height" type="number" inputmode="numeric" min="512" max="3104" step="16" value="928" />
+                  </label>
+                </div>
+                <small class="image-resolution-note" id="imageResolutionNote">当前尺寸 1664 × 928；按 16 像素对齐。</small>
+              </fieldset>
+
+              <fieldset class="field wide image-quality-field">
+                <legend>品质与采样步数</legend>
+                <div class="image-quality-presets" id="imageQualityPresets"></div>
+                <div class="image-quality-control">
+                  <input id="imageStepsRange" type="range" min="1" max="80" step="1" value="4" aria-label="采样步数" />
+                  <label class="field image-steps-field" for="imageSteps">
+                    <span>步数</span>
+                    <input id="imageSteps" name="steps" type="number" inputmode="numeric" min="1" max="80" step="1" value="4" />
+                  </label>
+                </div>
+                <small class="image-steps-note" id="imageStepsNote">当前 4 步。</small>
+              </fieldset>
+
+              <details class="image-advanced secondary-drawer wide">
+                <summary><span>高级参数</span><small>负面词、采样器、调度器和种子</small></summary>
+                <div class="image-advanced-grid">
+                  <label class="field wide" for="imageNegative">
+                    <span>排除内容</span>
+                    <textarea id="imageNegative" name="negative" rows="3"></textarea>
+                  </label>
+                  <label class="field" for="imageCfg">
+                    <span>提示词强度</span>
+                    <input id="imageCfg" name="cfg" type="number" min="0.1" max="10" step="0.1" value="1" />
+                  </label>
+                  <label class="field" for="imageSampler">
+                    <span>采样器</span>
+                    <select id="imageSampler" name="sampler"></select>
+                  </label>
+                  <label class="field" for="imageScheduler">
+                    <span>调度器</span>
+                    <select id="imageScheduler" name="scheduler"></select>
+                  </label>
+                  <label class="field wide" for="imageSeed">
+                    <span>随机种子</span>
+                    <div class="image-seed-row">
+                      <input id="imageSeed" name="seed" type="number" value="-1" />
+                      <button class="secondary" id="imageRandomSeedButton" type="button">随机</button>
+                    </div>
+                  </label>
+                </div>
+              </details>
+
+              <details class="image-prompt-preview secondary-drawer wide">
+                <summary><span>实际提交的提示词</span><small>展开检查最终 Prompt</small></summary>
+                <div class="secondary-drawer-body"><p id="imageEffectivePrompt">正在整理提示词。</p></div>
+              </details>
+            </div>
+
+            <div class="actions image-studio-actions">
+              <button class="secondary" id="imageReuseButton" type="button">沿用上次参数</button>
+              <button class="secondary" id="imageCompareWallButton" type="button" aria-pressed="false">对比墙：同种子开/关无限制</button>
+              <button class="primary" id="imageGenerateButton" type="submit">生成图片</button>
+            </div>
+            </form>
+
+            <section class="panel image-studio-result" aria-label="图片生成结果">
+            <div class="section-title">
+              <div>
+                <h2>生成结果</h2>
+                <p id="imageResultHint">等待生成</p>
+              </div>
+              <span id="imageJobStatus" role="status" aria-live="polite">空闲</span>
+            </div>
+            <div class="job-meta" id="imageJobMeta"><span>尚未提交任务</span></div>
+            <section class="image-output-location" aria-label="图片输出路径">
+              <div class="image-output-location-head">
+                <span>图片输出路径</span>
+                <button class="image-output-path-button" id="imageOutputPathButton" type="button" title="在系统文件管理器中打开">
+                  <code id="imageOutputPath">正在读取输出目录</code>
+                </button>
+              </div>
+              <form class="image-output-location-form" id="imageOutputForm">
+                <label class="field image-output-subdir-field" for="imageOutputSubdir">
+                  <span>输出子目录</span>
+                  <input id="imageOutputSubdir" type="text" autocomplete="off" spellcheck="false" placeholder="image_studio" />
+                </label>
+                <button class="secondary" id="imageOutputSaveButton" type="submit">保存位置</button>
+                <button class="secondary" id="imageOpenOutputButton" type="button">打开文件夹</button>
+              </form>
+            </section>
+            <div class="image-generation-progress-head">
+              <strong id="imageProgressLabel">等待生成</strong>
+              <span id="imageProgressPercent">0%</span>
+            </div>
+            <div class="progress-shell" id="imageProgressShell" role="progressbar" aria-label="图片生成进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="progress-bar" id="imageProgressBar"></div></div>
+            <div class="image-current-task-actions">
+              <button class="secondary danger hidden" id="imageCancelJobButton" type="button">中断当前任务</button>
+            </div>
+            <section class="image-task-queue" aria-label="图片任务队列">
+              <div class="image-task-queue-head">
+                <strong>任务队列</strong>
+                <span id="imageTaskQueueCount">0 个进行中</span>
+              </div>
+              <div class="image-task-queue-list" id="imageTaskQueueList">
+                <p class="empty-state">没有正在生成的任务。</p>
+              </div>
+            </section>
+            <div class="image-result-stage" id="imageResultStage">
+              <p>生成的图片会显示在这里。</p>
+            </div>
+            <div class="image-result-actions hidden" id="imageResultActions">
+              <button class="secondary" id="imageEditResultButton" type="button">微调当前结果</button>
+              <button class="secondary" id="imageFaceSwapResultButton" type="button">给当前结果换脸</button>
+              <button class="secondary" id="imageToVideoButton" type="button">用作视频关键帧</button>
+              <button class="primary" id="imageStillToVideoButton" type="button">送入并生成视频</button>
+              <button class="secondary" id="imageDownloadAllButton" type="button">下载全部图片</button>
+              <button class="ghost-button" id="imageRepeatButton" type="button">再次生成</button>
+            </div>
+            <div class="log-box" id="imageStudioLog" role="log" aria-live="polite"></div>
+            </section>
+          </div>
+
+          <section class="image-history-section" aria-label="图片生成历史">
+            <div class="image-history-head">
+              <div>
+                <h2>最近生成</h2>
+                <p>任务记录保存在本机，可翻页查看全部。</p>
+              </div>
+              <div class="image-history-toolbar">
+                <div class="chip-row image-history-filters" id="imageHistoryFilters" role="group" aria-label="历史筛选">
+                  <button type="button" class="chip active" data-history-filter="all">全部</button>
+                  <button type="button" class="chip" data-history-filter="nsfw">无限制</button>
+                  <button type="button" class="chip" data-history-filter="face_swap">换脸</button>
+                </div>
+                <label class="image-history-select-all" for="imageHistorySelectAll">
+                  <input id="imageHistorySelectAll" type="checkbox" />
+                  <span>全选本页</span>
+                </label>
+                <button class="secondary danger" id="imageHistoryDeleteButton" type="button" disabled>删除所选</button>
+                <button class="secondary" id="imageHistoryRefreshButton" type="button">刷新</button>
+              </div>
+            </div>
+            <div class="image-history-grid" id="imageHistoryGrid">
+              <p class="empty-state">暂无图片生成记录。</p>
+            </div>
+            <nav class="image-history-pagination" id="imageHistoryPagination" aria-label="图片生成记录分页">
+              <span class="image-history-page-summary" id="imageHistoryPageSummary" aria-live="polite">共 0 条生成记录</span>
+              <div class="image-history-page-controls">
+                <button class="secondary image-history-page-nav" id="imageHistoryPrevButton" type="button" title="上一页" aria-label="上一页" disabled>‹</button>
+                <div class="image-history-page-numbers" id="imageHistoryPageNumbers" aria-label="页码"></div>
+                <button class="secondary image-history-page-nav" id="imageHistoryNextButton" type="button" title="下一页" aria-label="下一页" disabled>›</button>
+              </div>
+            </nav>
+          </section>
+        </div>
+        <div class="source-modal face-auth-modal hidden" id="imageFaceAuthModal" role="dialog" aria-modal="true" aria-labelledby="imageFaceAuthTitle" aria-describedby="imageFaceAuthDescription">
+          <button class="source-modal-backdrop" id="imageFaceAuthBackdrop" type="button" aria-label="取消换脸授权确认"></button>
+          <section class="source-modal-panel face-auth-panel" tabindex="-1">
+            <div class="source-modal-head">
+              <div>
+                <strong id="imageFaceAuthTitle">确认目标图与身份参考图授权</strong>
+                <small id="imageFaceAuthDescription">确认后才会在本机检测双方人脸并允许换脸。</small>
+              </div>
+              <button class="secondary" id="imageFaceAuthCloseButton" type="button">关闭</button>
+            </div>
+            <div class="face-auth-copy">
+              <strong>本次处理范围</strong>
+              <p>检测、候选裁切和换脸只在本机完成。目标图保留完整画面，身份参考只提取你选中的面部。</p>
+            </div>
+            <label class="toggle-row face-auth-confirm" for="imageFaceAuthCheckbox">
+              <input id="imageFaceAuthCheckbox" type="checkbox" />
+              <span>
+                <strong>我确认拥有处理授权</strong>
+                <small>目标图与身份参考图中的人物均为本人，或我已获得所有可识别人物的明确授权，可以提取、比对并替换所选面部。</small>
+              </span>
+            </label>
+            <div class="face-auth-actions">
+              <button class="secondary" id="imageFaceAuthCancelButton" type="button">取消</button>
+              <button class="primary" id="imageFaceAuthConfirmButton" type="button" disabled>确认并检测双方</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view view-video-face-swap hidden" data-view="video-face-swap" aria-label="AI 视频换脸">
+        <div class="video-face-workspace">
+          <section class="panel video-face-controls-panel" aria-label="视频换脸设置">
+            <div class="section-title video-face-title">
+              <div>
+                <h2>AI 视频换脸</h2>
+                <p>独立视频后期 · ReActor 本地处理</p>
+              </div>
+              <span id="videoFaceSwapModuleBadge">检查中</span>
+            </div>
+
+            <div class="video-face-module-status pending" id="videoFaceSwapStandaloneStatus" role="status" aria-live="polite">
+              正在检查 ReActor 与换脸模型。
+            </div>
+
+            <div class="video-face-section">
+              <div class="video-face-section-head">
+                <strong>目标视频</strong>
+                <small>支持单个或批量排队</small>
+              </div>
+              <label class="field" for="videoFaceSwapBatchInput">
+                <span>选择待换脸视频</span>
+                <input id="videoFaceSwapBatchInput" type="file" accept=".mp4,.mov,.mkv,.webm,.avi" multiple />
+                <small id="videoFaceSwapBatchSummary">未选择时使用最近完成的视频；可一次选择多个视频。</small>
+              </label>
+              <div class="video-face-fallback" id="videoFaceSwapFallbackSource">当前没有可自动沿用的视频。</div>
+            </div>
+
+            <div class="video-face-section">
+              <div class="video-face-section-head">
+                <strong>身份参考</strong>
+                <small>角色盒或本地图片二选一</small>
+              </div>
+              <div class="video-face-source-grid">
+                <label class="field" for="videoCharacterSelect">
+                  <span>角色盒身份</span>
+                  <select id="videoCharacterSelect"></select>
+                  <small id="videoCharacterSelectHelp">与图片工作室的角色盒共用。</small>
+                </label>
+                <label class="field" for="videoFaceSwapIdentityFile">
+                  <span>上传身份参考图</span>
+                  <input id="videoFaceSwapIdentityFile" type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,image/png,image/jpeg,image/webp,image/bmp" />
+                  <small>上传图片优先于角色盒身份。</small>
+                </label>
+              </div>
+            </div>
+
+            <div class="video-face-parameter-grid">
+              <label class="field" for="videoFaceSwapWeightRange">
+                <span>换脸权重</span>
+                <div class="lora-strength-control">
+                  <input id="videoFaceSwapWeightRange" type="range" min="0" max="1" step="0.05" value="0.85" aria-label="视频换脸权重" />
+                  <input id="videoFaceSwapWeight" type="number" min="0" max="1" step="0.05" value="0.85" />
+                </div>
+                <small>较低更保留目标表情，较高更接近身份参考。</small>
+              </label>
+              <label class="field" for="videoFaceSwapFps">
+                <span>输出 FPS</span>
+                <input id="videoFaceSwapFps" type="number" min="1" max="60" step="1" value="24" />
+                <small>通常与源视频保持一致。</small>
+              </label>
+            </div>
+
+            <div class="video-face-actions">
+              <button class="primary" id="videoFaceSwapSubmitButton" type="button" disabled>加入换脸队列</button>
+              <button class="secondary" id="videoFaceSwapInstallButton" type="button">一键准备换脸组件</button>
+            </div>
+            <small class="video-face-authorization-note">提交时会确认目标视频与身份参考图的处理授权。</small>
+          </section>
+
+          <section class="panel video-face-monitor-panel" aria-label="视频换脸任务与结果">
+            <div class="section-title">
+              <div>
+                <h2>任务与结果</h2>
+                <p>批量任务独立排队，可查看真实进度并随时中断。</p>
+              </div>
+              <span id="videoFaceSwapJobBadge">空闲</span>
+            </div>
+            <div class="video-progress-head">
+              <strong id="videoFaceSwapProgressLabel">等待换脸任务</strong>
+              <span id="videoFaceSwapProgressPercent">0%</span>
+            </div>
+            <div class="progress-shell" id="videoFaceSwapProgressShell" role="progressbar" aria-label="视频换脸进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="progress-bar" id="videoFaceSwapProgressBar"></div>
+            </div>
+            <div class="video-task-queue video-face-task-queue" aria-label="正在进行的视频换脸任务">
+              <div class="video-task-queue-head"><strong>换脸队列</strong><span id="videoFaceSwapQueueCount">0 个进行中</span></div>
+              <div class="video-task-queue-list" id="videoFaceSwapQueueList"><p>没有正在进行的换脸任务。</p></div>
+            </div>
+            <div class="monitor video-face-monitor">
+              <div class="monitor-bar"><span>Face swap preview</span><i></i></div>
+              <div class="result-view video-face-result-view" id="videoFaceSwapResultView">
+                <p>换脸结果会显示在这里。</p>
+              </div>
+            </div>
+            <div class="video-face-result-actions">
+              <button class="secondary danger hidden" id="videoFaceSwapCancelButton" type="button">中断当前换脸任务</button>
+            </div>
+            <div class="log-box video-face-log" id="videoFaceSwapLog" role="log" aria-live="polite"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view view-download-center hidden" data-view="download-center" aria-label="下载中心">
+        <div class="download-center-page">
+          <section class="panel download-center-overview" aria-label="下载概况">
+            <div class="section-title download-center-title">
+              <div>
+                <h2>下载中心</h2>
+                <p>任务与本地资源</p>
+              </div>
+              <span id="downloadCenterBadge">载入中</span>
+            </div>
+
+            <div class="download-summary-grid" aria-label="下载统计">
+              <div class="download-summary-item">
+                <span>正在处理</span>
+                <strong id="downloadActiveCount">0</strong>
+                <small id="downloadPausedCount">无暂停任务</small>
+              </div>
+              <div class="download-summary-item">
+                <span>已下载资源</span>
+                <strong id="downloadInstalledCount">0</strong>
+                <small id="downloadResourceBreakdown">模型 0 · 节点 0</small>
+              </div>
+              <div class="download-summary-item">
+                <span>未完成断点</span>
+                <strong id="downloadPartialCount">0</strong>
+                <small id="downloadPartialSize">0 B</small>
+                <button class="secondary download-resume-all hidden" id="downloadResumeAllButton" type="button">一键续传全部</button>
+              </div>
+              <div class="download-summary-item">
+                <span>模型占用</span>
+                <strong id="downloadModelSize">0 B</strong>
+                <small>已完成模型文件</small>
+              </div>
+            </div>
+
+            <div class="download-location-band">
+              <div class="download-location-copy">
+                <span id="downloadSourceLabel">下载源</span>
+                <strong id="downloadSourceEndpoint">读取中</strong>
+                <code id="downloadCenterRoot">读取下载目录中</code>
+              </div>
+              <div class="download-location-actions">
+                <button class="secondary" id="downloadCenterSourceSettings" type="button">下载源设置</button>
+                <button class="secondary" id="downloadCenterOpenRoot" type="button">打开下载目录</button>
+                <button class="primary hidden" id="downloadCenterGoGenerate" type="button">去生成</button>
+                <button class="primary" id="downloadCenterRefresh" type="button">刷新</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="download-center-section" aria-labelledby="downloadTransfersTitle">
+            <div class="download-section-head">
+              <div>
+                <h2 id="downloadTransfersTitle">下载任务</h2>
+                <p id="downloadTransferSummary">正在读取任务记录</p>
+              </div>
+              <div class="download-filter-group" id="downloadTransferFilters" aria-label="任务筛选">
+                <button type="button" data-transfer-filter="all">全部</button>
+                <button class="active" type="button" data-transfer-filter="active">进行中</button>
+                <button type="button" data-transfer-filter="history">已结束</button>
+              </div>
+            </div>
+            <div class="download-transfer-list" id="downloadTransferList" aria-live="polite">
+              <div class="download-empty-state">正在读取下载任务。</div>
+            </div>
+          </section>
+
+          <section class="download-center-section" aria-labelledby="downloadResourcesTitle">
+            <div class="download-section-head download-resource-head">
+              <div>
+                <h2 id="downloadResourcesTitle">本地资源</h2>
+                <p id="downloadResourceSummary">正在扫描模型与自定义节点</p>
+              </div>
+              <div class="download-resource-tools">
+                <label class="download-search-field" for="downloadResourceSearch">
+                  <span>搜索</span>
+                  <input id="downloadResourceSearch" type="search" placeholder="名称、目录或文件名" autocomplete="off" />
+                </label>
+                <label class="download-sort-field" for="downloadResourceSort">
+                  <span>排序</span>
+                  <select id="downloadResourceSort">
+                    <option value="modified">最近更新</option>
+                    <option value="name">名称</option>
+                    <option value="size">文件大小</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div class="download-filter-group download-resource-filters" id="downloadResourceFilters" aria-label="资源筛选">
+              <button class="active" type="button" data-resource-filter="all">全部</button>
+              <button type="button" data-resource-filter="model">模型</button>
+              <button type="button" data-resource-filter="custom_node">自定义节点</button>
+              <button type="button" data-resource-filter="partial">断点文件</button>
+            </div>
+            <div class="download-resource-list" id="downloadResourceList" aria-live="polite">
+              <div class="download-empty-state">正在读取本地资源。</div>
+            </div>
+            <div class="download-pagination">
+              <span id="downloadResourcePageSummary">第 1 / 1 页</span>
+              <div>
+                <button class="secondary" id="downloadResourcePrev" type="button">上一页</button>
+                <button class="secondary" id="downloadResourceNext" type="button">下一页</button>
+              </div>
+            </div>
+          </section>
+
+          <div class="download-center-status" id="downloadCenterStatus" role="status" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <section class="view hidden" data-view="library" aria-label="作品库">
+        <header class="workspace-section-head"><h2>作品</h2></header>
+          <section class="download-center-section" aria-label="历史输出">
+            <div class="output-manager">
+              <div class="output-manager-head">
+                <div class="output-manager-title">
+                  <span>视频与图片</span>
+                  <small id="outputDirLabel">output\local_ai_workbench</small>
+                </div>
+                <div class="output-manager-actions">
+                  <button class="ghost-button" id="outputRefreshButton" type="button" title="刷新输出文件">刷新</button>
+                  <button class="ghost-button" id="outputSelectButton" type="button" title="批量选择删除">批量管理</button>
+                  <button class="ghost-button danger" id="outputClearButton" type="button" title="删除全部输出文件">一键清空</button>
+                </div>
+              </div>
+              <div class="output-selection-bar hidden" id="outputSelectionBar">
+                <label class="output-select-all" for="outputSelectAll">
+                  <input type="checkbox" id="outputSelectAll" />
+                  <span>全选</span>
+                </label>
+                <span class="output-selection-count" id="outputSelectionCount">已选 0 项</span>
+                <div class="output-selection-actions">
+                  <button class="ghost-button danger" id="outputDeleteSelectedButton" type="button">删除所选</button>
+                  <button class="ghost-button" id="outputCancelSelectButton" type="button">取消</button>
+                </div>
+              </div>
+              <form class="output-dir-form" id="outputDirForm">
+                <label class="output-dir-field" for="outputSubdirInput">
+                  <span>输出子目录</span>
+                  <input id="outputSubdirInput" type="text" autocomplete="off" spellcheck="false" placeholder="local_ai_workbench" />
+                </label>
+                <button class="secondary" id="outputDirSaveButton" type="submit">保存位置</button>
+              </form>
+              <div class="output-grid" id="outputGrid" role="list" aria-live="polite">
+                <p class="output-empty">暂无输出文件。</p>
+              </div>
+            </div>
+          </section>
+
+        <section class="library-preview hidden" id="libraryPreviewSection" aria-label="作品预览">
+          <h3 id="libraryPreviewTitle">作品预览</h3>
+          <div id="libraryPreview" class="result-view"></div>
+        </section>
+      </section>
+
+      <section class="view view-environment" data-view="environment" aria-label="环境与安装">
+        <header class="environment-intro">
+          <div>
+            <span>第 1 步</span>
+            <strong>检测环境并选择模型</strong>
+            <small>系统会按平台、显存或统一内存推荐模型；也可以按能力和量化自由选择。</small>
+          </div>
+          <button class="primary" id="enterWorkflowButton" type="button" disabled>检测完成后进入视频工作流</button>
+        </header>
+        <div class="source-modal hidden" id="sourceConfigModal" role="dialog" aria-modal="true" aria-labelledby="sourceConfigTitle">
+          <button class="source-modal-backdrop" id="sourceConfigBackdrop" type="button" aria-label="关闭下载源配置"></button>
+          <section class="source-modal-panel" tabindex="-1">
+            <div class="source-modal-head">
+              <div>
+                <strong id="sourceConfigTitle">下载源与数据源</strong>
+                <small>一键准备、ComfyUI 安装、节点依赖、模型下载和安装修复都会读取这里。</small>
+              </div>
+              <button class="secondary" id="closeSourceConfigButton" type="button">关闭</button>
+            </div>
+            <div class="download-source-controls">
+              <div class="download-region-grid" id="downloadRegionOptions" aria-label="下载源区域">
+                <label class="download-region-card">
+                  <input type="radio" name="downloadRegion" value="international" />
+                  <span>
+                    <strong>国际</strong>
+                    <small>Hugging Face / PyPI 官方源</small>
+                  </span>
+                </label>
+                <label class="download-region-card">
+                  <input type="radio" name="downloadRegion" value="china" />
+                  <span>
+                    <strong>中国境内</strong>
+                    <small>预设 HF 镜像和国内 pip 镜像</small>
+                  </span>
+                </label>
+                <label class="download-region-card">
+                  <input type="radio" name="downloadRegion" value="custom" />
+                  <span>
+                    <strong>自定义</strong>
+                    <small>手动填写下载源和代理</small>
+                  </span>
+                </label>
+              </div>
+              <label class="download-source-input" for="hfEndpointInput">
+                <span>模型数据源</span>
+                <input id="hfEndpointInput" type="url" placeholder="https://huggingface.co" autocomplete="off" />
+              </label>
+              <label class="download-source-input" for="pipIndexInput">
+                <span>Python 依赖源</span>
+                <input id="pipIndexInput" type="url" placeholder="https://pypi.org/simple" autocomplete="off" />
+              </label>
+              <label class="download-source-input" for="proxyUrlInput">
+                <span>网络代理</span>
+                <input id="proxyUrlInput" type="url" placeholder="http://127.0.0.1:7890" autocomplete="off" />
+              </label>
+              <button class="secondary" id="saveDownloadSettingsButton" type="button">保存设置</button>
+              <button class="primary" id="testDownloadSourcesButton" type="button">保存并测试源</button>
+            </div>
+            <div class="workflow-status pending" id="downloadSourceStatus">留空使用官方源且不设置代理；保存并测试源会先写入设置，再检查当前安装计划需要的下载源。</div>
+          </section>
+        </div>
+
+        <section class="env-job-panel" id="envJobPanel" aria-label="环境任务进度">
+          <div class="env-job-head">
+            <strong id="envJobTitle">环境任务</strong>
+            <span id="envJobStatus" role="status" aria-live="polite">空闲</span>
+          </div>
+          <div class="progress-shell">
+            <div class="progress-bar" id="envProgressBar"></div>
+          </div>
+          <div class="env-progress-summary" id="envProgressSummary">尚未开始下载。</div>
+          <div class="env-install-files hidden" id="envInstallFiles"></div>
+          <div class="env-install-controls hidden" id="envInstallControls">
+            <button class="secondary" id="envPauseInstallButton" type="button">暂停</button>
+            <button class="secondary hidden" id="envResumeInstallButton" type="button">继续</button>
+            <button class="secondary" id="envCancelInstallButton" type="button">取消</button>
+          </div>
+          <button class="primary hidden" id="envGoGenerateButton" type="button">去生成</button>
+          <div class="env-log-box" id="envLogBox" role="log" aria-live="polite">点击「一键准备环境」或「一键安装/修复缺失项」后，任务进度会显示在这里。</div>
+        </section>
+
+        <div class="env-grid-4">
+          <section class="env-card-group" aria-label="检测与前置">
+            <div class="env-card-group-title">
+              <strong>检测与前置</strong>
+              <small>系统、GPU、Python、下载工具、磁盘和目录权限</small>
+            </div>
+            <div class="env-head">
+              <div>
+                <strong>环境体检结果</strong>
+                <small id="environmentSummary" role="status" aria-live="polite">正在检测系统、GPU、ComfyUI 和模型文件。</small>
+              </div>
+              <div class="env-actions">
+                <button class="secondary" id="detectEnvironmentButton" type="button">重新侦测</button>
+                <button class="secondary" id="openSourceConfigButton" type="button">配置下载/数据源</button>
+                <button class="secondary" id="runSelfTestButton" type="button">运行本机自检</button>
+                <button class="secondary" id="runVideoSmokeButton" type="button">生成链路测试</button>
+              </div>
+            </div>
+            <div class="env-grid" id="environmentCards">
+              <div class="env-card">
+                <small>操作系统</small>
+                <strong>检测中</strong>
+                <span>请稍候</span>
+              </div>
+            </div>
+            <details class="secondary-drawer env-drawer">
+              <summary><span>开箱前置条件</span><small>Python、前端依赖、下载工具、磁盘和目录权限</small></summary>
+              <div class="secondary-drawer-body">
+                <div class="prerequisite-list" id="prerequisiteChecks"></div>
+              </div>
+            </details>
+          </section>
+
+          <section class="env-card-group" aria-label="ComfyUI 安装与运行模式">
+            <div class="env-card-group-title">
+              <strong>ComfyUI 与运行模式</strong>
+              <small>先装/启动 ComfyUI，再选择这台机器怎么用</small>
+            </div>
+            <div class="env-block">
+              <div class="env-block-title">
+                <strong>ComfyUI 安装与启动</strong>
+                <small>先装/启动 ComfyUI，再装节点和模型</small>
+              </div>
+              <div class="bootstrap-console">
+                <div class="bootstrap-grid" id="bootstrapCards"></div>
+                <div class="env-actions">
+                  <button class="secondary" id="refreshBootstrapButton" type="button">刷新 ComfyUI 状态</button>
+                  <button class="primary" id="installComfyButton" type="button">安装/更新 ComfyUI</button>
+                  <button class="secondary" id="startComfyButton" type="button">启动 ComfyUI</button>
+                </div>
+              </div>
+            </div>
+            <details class="secondary-drawer env-drawer" id="serviceDrawer">
+              <summary><span>运行入口模式</span><small>本机一体 / 服务端 / 客户端与访问令牌</small></summary>
+              <div class="secondary-drawer-body">
+            <div class="service-panel" id="servicePanel">
+              <div class="service-panel-head">
+                <div>
+                  <strong>运行入口模式</strong>
+                  <small>第一次运行先选这台机器怎么用：只当服务端、只当客户端，或本机同时控制和生成。</small>
+                </div>
+                <span id="serviceModeBadge">未配置</span>
+              </div>
+
+              <div class="workflow-status pending hidden" id="serviceFirstRun">
+                第一次运行需要先保存一个模式。保存后本机配置会写入项目目录；切换到服务端或双模式后，请重启 start.bat 让局域网监听生效。
+              </div>
+
+              <div class="service-mode-grid" id="serviceModeOptions" aria-label="运行入口模式">
+                <label class="service-mode-card">
+                  <input type="radio" name="serviceMode" value="both" />
+                  <span>
+                    <strong>本机一体</strong>
+                    <small>前端和生成后端在同一台机器，最适合首次开箱。</small>
+                  </span>
+                </label>
+                <label class="service-mode-card">
+                  <input type="radio" name="serviceMode" value="server" />
+                  <span>
+                    <strong>服务端</strong>
+                    <small>这台机器负责装环境、跑 ComfyUI，并允许局域网前端连接。</small>
+                  </span>
+                </label>
+                <label class="service-mode-card">
+                  <input type="radio" name="serviceMode" value="client" />
+                  <span>
+                    <strong>客户端</strong>
+                    <small>这台机器只打开面板，任务提交给另一台服务端机器。</small>
+                  </span>
+                </label>
+              </div>
+
+              <div class="service-settings-grid">
+                <label class="service-setting" for="serviceServerUrl">
+                  <span>服务端地址</span>
+                  <input id="serviceServerUrl" type="url" placeholder="http://192.168.1.20:7860" autocomplete="off" />
+                  <small>客户端模式必填；填写服务端页面里显示的局域网地址。</small>
+                </label>
+                <label class="service-setting" for="serviceAccessToken">
+                  <span>访问令牌</span>
+                  <input id="serviceAccessToken" type="text" placeholder="服务端自动生成，可留空" autocomplete="off" />
+                  <small>服务端/双模式会自动生成；局域网客户端写操作需要相同令牌。</small>
+                </label>
+              </div>
+
+              <div class="service-url-grid">
+                <div>
+                  <small>本机地址</small>
+                  <strong id="serviceLocalUrl">检测中</strong>
+                </div>
+                <div>
+                  <small>局域网地址</small>
+                  <strong id="serviceLanUrl">保存服务端模式后显示</strong>
+                </div>
+                <div>
+                  <small>当前 API</small>
+                  <strong id="serviceApiUrl">本机</strong>
+                </div>
+              </div>
+
+              <div class="service-actions">
+                <button class="primary" id="saveServiceConfigButton" type="button">保存运行模式</button>
+                <button class="secondary" id="reloadServiceConfigButton" type="button">刷新连接信息</button>
+              </div>
+              <div class="workflow-status pending" id="serviceStatus">正在读取运行模式。</div>
+            </div>
+              </div>
+            </details>
+          </section>
+
+          <section class="env-card-group" aria-label="模型控制台">
+            <div class="env-card-group-title">
+              <strong>模型控制台</strong>
+              <small>安装档位、目标模型、一键准备和模型目录共用同一份清单</small>
+            </div>
+            <section class="model-hub" aria-label="模型控制台">
+              <div class="model-hub-head">
+                <div>
+                  <strong>当前模型与一键安装</strong>
+                  <small>按本机硬件推荐；更换模型、量化和下载目录在下方「更换模型」里。</small>
+                </div>
+              </div>
+              <div class="setup-logic-panel" aria-label="安装执行逻辑">
+                <div class="setup-logic-card source-card">
+                  <small>下载/数据源</small>
+                  <strong id="downloadSourceBrief">读取中</strong>
+                  <span id="downloadSourceDetail">一键准备和一键安装都会使用这里保存的模型源、pip 源和代理。</span>
+                  <button class="secondary" id="openSourceConfigInlineButton" type="button">配置源</button>
+                </div>
+                <div class="setup-logic-card action-card">
+                  <small>一键准备环境</small>
+                  <strong>首次开箱 / 重建环境</strong>
+                  <span id="fullSetupScope">安装或更新 ComfyUI，并按当前档位补齐模型、节点和后期权重。</span>
+                  <button class="primary" id="runFullSetupButton" type="button">一键准备环境</button>
+                </div>
+                <div class="setup-logic-card action-card">
+                  <small>一键安装/修复缺失项</small>
+                  <strong>只补当前档位缺失项</strong>
+                  <span id="workflowInstallScope">不重装 ComfyUI，只修复模型文件、自定义节点依赖和加载异常。</span>
+                  <button class="primary" id="installMissingButton" type="button">一键安装/修复缺失项</button>
+                </div>
+              </div>
+              <div class="model-sync-panel" id="modelSyncPanel"></div>
+
+              <details class="secondary-drawer env-drawer" id="modelAdvancedDrawer">
+                <summary><span>模型浏览器 · 找模型与下载</span><small>搜索、按就绪状态筛选、切换目标模型、量化与下载位置</small></summary>
+                <div class="secondary-drawer-body">
+                  <div class="model-browser-toolbar">
+                    <label class="model-search-field" for="modelCatalogSearch">
+                      <span>搜索模型</span>
+                      <input id="modelCatalogSearch" type="search" placeholder="名称、系列、量化、能力或用途关键词" autocomplete="off" />
+                    </label>
+                    <label for="modelCatalogReadyFilter">
+                      <span>就绪状态</span>
+                      <select id="modelCatalogReadyFilter" aria-label="按文件就绪状态筛选">
+                        <option value="all">全部状态</option>
+                        <option value="ready">已就绪（可直接生成）</option>
+                        <option value="partial">部分下载</option>
+                        <option value="missing">未下载</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="model-hub-controls">
+                    <label>
+                      <span>目标模型</span>
+                      <select id="modelCatalogSelector" aria-label="当前目标模型">
+                        <option value="">模型目录加载中</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>系列筛选</span>
+                      <select id="modelCatalogFamilyFilter" aria-label="模型系列筛选">
+                        <option value="all">系列加载中</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>量化筛选</span>
+                      <select id="modelCatalogQuantFilter" aria-label="量化筛选">
+                        <option value="all">量化加载中</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label class="toggle-row model-native-only" for="modelCatalogNativeOnly">
+                    <input id="modelCatalogNativeOnly" type="checkbox" checked />
+                    <span><strong>只显示本页可生成的模型</strong><small>隐藏“只下载去 ComfyUI 跑模板”和“仅目录参考”的条目。</small></span>
+                  </label>
+                  <div class="model-catalog-count" id="modelCatalogCount" role="status" aria-live="polite"></div>
+                  <div class="model-catalog" id="modelCatalog"></div>
+
+                  <div class="online-search-block" aria-label="在线搜索新模型">
+                    <div class="online-search-head">
+                      <strong>在线搜索新模型</strong>
+                      <small>从 Hugging Face / Civitai 搜索并入库；下载支持断点续传，入库后出现在上方模型列表并参与就绪状态标注。</small>
+                    </div>
+                    <div class="online-search-controls">
+                      <div class="segmented" id="onlineSearchSource">
+                        <button type="button" class="active" data-search-source="hf">Hugging Face</button>
+                        <button type="button" data-search-source="civitai">Civitai</button>
+                      </div>
+                      <input id="onlineSearchInput" type="search" placeholder="模型名或关键词，回车搜索" autocomplete="off" />
+                      <button class="secondary" id="onlineSearchButton" type="button">搜索</button>
+                    </div>
+                    <div class="online-search-status" id="onlineSearchStatus" role="status" aria-live="polite"></div>
+                    <div class="online-search-results" id="onlineSearchResults"></div>
+                  </div>
+
+                  <label class="profile-select-wrap" for="installProfileSelector">
+                    <span>安装档位</span>
+                    <select id="installProfileSelector"></select>
+                  </label>
+                  <small class="install-profile-hint" id="installProfileHint">安装档位决定一键准备和一键安装会处理哪些模型、节点和后期权重。</small>
+                  <div class="model-storage-panel" aria-label="模型下载目录">
+                    <label for="modelStoragePreset">
+                      <span>下载位置</span>
+                      <select id="modelStoragePreset"></select>
+                    </label>
+                    <label for="modelDownloadPath">
+                      <span>模型目录</span>
+                      <input id="modelDownloadPath" type="text" autocomplete="off" spellcheck="false" />
+                    </label>
+                    <small id="modelStorageStatus">正在读取磁盘位置。</small>
+                  </div>
+                </div>
+              </details>
+            </section>
+            <details class="secondary-drawer env-drawer">
+              <summary><span>每一步可用模型</span><small>根据当前硬件和文件自动推荐</small></summary>
+              <div class="secondary-drawer-body">
+                <div class="model-recommendations" id="modelRecommendations"></div>
+              </div>
+            </details>
+          </section>
+
+          <section class="env-card-group" aria-label="诊断与缺失">
+            <div class="env-card-group-title">
+              <strong>诊断与缺失</strong>
+              <small>检查加载状态、缺失项和低配路线</small>
+            </div>
+            <div class="env-block">
+              <div class="env-block-title">
+                <strong>缺失项</strong>
+                <small>一键安装只补模型、权重和工作流自定义节点</small>
+              </div>
+              <div class="missing-items" id="missingItems"></div>
+            </div>
+            <details class="secondary-drawer env-drawer">
+              <summary><span>加载诊断</span><small>下载目录、节点依赖和 ComfyUI 模型列表</small></summary>
+              <div class="secondary-drawer-body">
+                <div class="load-diagnostics" id="loadDiagnostics"></div>
+              </div>
+            </details>
+            <details class="secondary-drawer env-drawer">
+              <summary><span>低配 / mac 路线</span><small>低显存或 Apple Silicon 可按这里选保守档</small></summary>
+              <div class="secondary-drawer-body">
+                <div class="small-routes" id="smallModelRoutes"></div>
+              </div>
+            </details>
+          </section>
+        </div>
+      </section>
+
+      <footer class="signature">created by zlk 2026</footer>
+    </main>
+
+    <script src="/static/workflow-state.js?build=20261023-journey-1"></script>
+    <script src="/static/workbench-journey.js?build=20261023-journey-1"></script>
+    <script src="/static/app.js?build=20261023-journey-1"></script>
+    <script src="/static/image-studio.js?build=20261023-journey-1"></script>
+    <script src="/static/download-center.js?v=20260805-minimax-h3-1"></script>
+  </body>
+</html>

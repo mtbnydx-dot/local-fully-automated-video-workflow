@@ -1,0 +1,60 @@
+{
+  "1": {"class_type": "LoadImage", "inputs": {"image": "keyframe-upload-required.png"}},
+  "2": {"class_type": "LTXVPreprocess", "inputs": {"image": ["1", 0], "img_compression": 40}},
+  "3": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "ltxv-2b-0.9.8-distilled-fp8.safetensors"}},
+  "4": {"class_type": "CLIPLoader", "inputs": {"clip_name": "t5xxl_fp16.safetensors", "type": "ltxv", "device": "default"}},
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "A realistic modern esports training room, Queensland esports branding style, soft RGB lighting, students using gaming peripherals, clean commercial photography, wide angle lens, natural shadows, cinematic slow dolly-in camera movement.",
+      "clip": ["4", 0]
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "overexposed, low quality, blurry, jpeg artifacts, distorted hands, deformed face, warped screens, unreadable text, watermark, subtitles, flicker, jitter",
+      "clip": ["4", 0]
+    }
+  },
+  "7": {
+    "class_type": "LTXVImgToVideo",
+    "inputs": {
+      "positive": ["5", 0],
+      "negative": ["6", 0],
+      "vae": ["3", 2],
+      "image": ["2", 0],
+      "width": 512,
+      "height": 320,
+      "length": 25,
+      "batch_size": 1,
+      "strength": 1.0
+    }
+  },
+  "8": {"class_type": "LTXVConditioning", "inputs": {"frame_rate": 24.0, "positive": ["7", 0], "negative": ["7", 1]}},
+  "9": {
+    "class_type": "LTXVScheduler",
+    "inputs": {"steps": 12, "max_shift": 2.05, "base_shift": 0.95, "stretch": true, "terminal": 0.1, "latent": ["7", 2]}
+  },
+  "10": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}},
+  "11": {
+    "class_type": "SamplerCustom",
+    "inputs": {
+      "model": ["3", 0],
+      "add_noise": true,
+      "noise_seed": 1,
+      "cfg": 3.0,
+      "positive": ["8", 0],
+      "negative": ["8", 1],
+      "sampler": ["10", 0],
+      "sigmas": ["9", 0],
+      "latent_image": ["7", 2]
+    }
+  },
+  "12": {"class_type": "VAEDecode", "inputs": {"samples": ["11", 0], "vae": ["3", 2]}},
+  "13": {"class_type": "CreateVideo", "inputs": {"images": ["12", 0], "fps": 24.0}},
+  "14": {
+    "class_type": "SaveVideo",
+    "inputs": {"video": ["13", 0], "filename_prefix": "local_ai_workbench/Mac_LTX_I2V", "format": "mp4", "codec": "h264"}
+  }
+}

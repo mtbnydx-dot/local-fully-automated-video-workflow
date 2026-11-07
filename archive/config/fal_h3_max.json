@@ -1,0 +1,22 @@
+{
+  "id": "fal_h3_max_api",
+  "name": "H3 Max by fal",
+  "release_date": "2026-08-27",
+  "availability": "api_only",
+  "weights_available": false,
+  "local_gpu_required": false,
+  "comfyui_required": false,
+  "api_key_env": "FAL_KEY",
+  "endpoints": {
+    "text_to_video": "minimax/h3-max/text-to-video",
+    "image_to_video": "minimax/h3-max/image-to-video"
+  },
+  "supported_duration_seconds": [5, 15],
+  "resolutions": ["480P", "768P"],
+  "official_sources": [
+    "https://fal.ai/learn/devs/introducing-h3-max-by-fal",
+    "https://fal.ai/models/minimax/h3-max/text-to-video/api",
+    "https://fal.ai/models/minimax/h3-max/image-to-video/api"
+  ],
+  "download_policy": "Only download a full checkpoint published by the official fal Hugging Face organization. Never substitute a third-party repository with a similar name."
+}

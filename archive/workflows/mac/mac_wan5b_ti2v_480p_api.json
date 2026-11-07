@@ -1,0 +1,49 @@
+{
+  "1": {"class_type": "LoadImage", "inputs": {"image": "keyframe-upload-required.png"}},
+  "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors", "type": "wan", "device": "default"}},
+  "3": {"class_type": "VAELoader", "inputs": {"vae_name": "wan2.2_vae.safetensors"}},
+  "4": {"class_type": "UNETLoader", "inputs": {"unet_name": "Wan2.2/wan2.2_ti2v_5B_fp16.safetensors", "weight_dtype": "default"}},
+  "5": {"class_type": "ModelSamplingSD3", "inputs": {"model": ["4", 0], "shift": 5.0}},
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "A realistic modern esports training room, Queensland esports branding style, soft RGB lighting, students using gaming peripherals, clean commercial photography, wide angle lens, natural shadows, cinematic slow dolly-in camera movement.",
+      "clip": ["2", 0]
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "overexposed, low quality, blurry, jpeg artifacts, distorted hands, deformed face, warped screens, unreadable text, watermark, subtitles, flicker, jitter",
+      "clip": ["2", 0]
+    }
+  },
+  "8": {
+    "class_type": "Wan22ImageToVideoLatent",
+    "inputs": {"vae": ["3", 0], "width": 832, "height": 480, "length": 49, "batch_size": 1, "start_image": ["1", 0]}
+  },
+  "9": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["5", 0],
+      "seed": 1,
+      "steps": 20,
+      "cfg": 5.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "positive": ["6", 0],
+      "negative": ["7", 0],
+      "latent_image": ["8", 0],
+      "denoise": 1.0
+    }
+  },
+  "10": {
+    "class_type": "VAEDecodeTiled",
+    "inputs": {"samples": ["9", 0], "vae": ["3", 0], "tile_size": 512, "overlap": 64, "temporal_size": 16, "temporal_overlap": 4}
+  },
+  "11": {"class_type": "CreateVideo", "inputs": {"images": ["10", 0], "fps": 24}},
+  "12": {
+    "class_type": "SaveVideo",
+    "inputs": {"video": ["11", 0], "filename_prefix": "local_ai_workbench/Mac_Wan5B_480P", "format": "mp4", "codec": "h264"}
+  }
+}

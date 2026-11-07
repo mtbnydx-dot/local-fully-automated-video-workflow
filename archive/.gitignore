@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.playwright-cli/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local logs and runtime files
+*.log
+*.out.log
+*.err.log
+.runtime/
+.runtime_*.json
+.env
+.env.*
+.local_ai_workbench_config.json
+.wan22_workflow_config.json
+github_upload/
+
+# ComfyUI local data. Keep these out of GitHub.
+models/
+input/
+output/
+temp/
+user/
+custom_nodes/
+
+# Large model and media artifacts
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.gguf
+*.bin
+*.onnx
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.avi
+*.png
+*.jpg
+*.jpeg
+*.webp
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude/
+.zcode/
+nul
