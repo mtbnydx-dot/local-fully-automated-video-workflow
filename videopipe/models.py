@@ -92,18 +92,21 @@ class MediaConfig(InputModel):
     finalize_threads: int = Field(default=2, ge=1)
 
 
+# Noto Sans CJK SC Bold (Sans2.004, SIL Open Font License 1.1, see fonts/LICENSE) ships inside the package.
+BUNDLED_FONT = Path(__file__).with_name("fonts") / "NotoSansCJKsc-Bold.otf"
+
+
 class SubtitleConfig(InputModel):
     burn: bool = False
+    # None selects the bundled font at run time, so exported configurations stay valid on every machine.
     font_file: Path | None = None
     font: str | None = None  # Family inside font_file; collections such as NotoSansCJK-Bold.ttc need it.
     size: float = Field(default=0.035, gt=0, lt=1)  # One CJK glyph (em) as a fraction of frame height.
     max_lines: int = Field(default=3, ge=1)
 
-    @model_validator(mode="after")
-    def burning_needs_font(self):
-        if self.burn and self.font_file is None:
-            raise ValueError("subtitles.burn requires subtitles.font_file")
-        return self
+    @property
+    def font_path(self) -> Path:
+        return self.font_file or BUNDLED_FONT
 
 
 class ScriptConfig(InputModel):

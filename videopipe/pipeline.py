@@ -331,7 +331,7 @@ class Production:
         with self.events.stage("finalize", version=self.state["assembly_version"], burn_subtitles=burn):
             ass = write_ass(Path(subtitles["path"]), folder / "episode.ass", style, output.width, output.height) if burn else None
             final = finalize(self.root / self.state["draft"], folder / "final.mp4", output,
-                             subtitles=ass, fonts=style.font_file.parent if burn else None)
+                             subtitles=ass, fonts=style.font_path.parent if burn else None)
         if subtitles.get("path"):
             shutil.copy2(subtitles["path"], folder / "episode.srt")
         info = inspect_video(final)

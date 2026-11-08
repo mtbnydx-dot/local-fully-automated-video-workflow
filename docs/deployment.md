@@ -64,11 +64,7 @@ Qwen 启动参数包括 `modelopt` 量化、CPU embedding offload、TP1、64K co
 
 GPU7 同时容纳常驻 vLLM 和阶段性 ASR。ASR 默认 `gpu: 7`、`compute_type: int8_float16`、超时 600 秒，模型从本地读取；显存分配和并发根据目标节点的峰值用量调整。缺少 ASR 依赖、模型或运行库时报告 `unavailable`，继续字幕粗对齐和交付。
 
-成片编码和字幕烧录都在 CPU 上完成：B200 没有视频编码单元，FFmpeg 用 libx264 编码、libass 渲染字幕。编码线程数由 `media.finalize_threads` 设置，B200 配置为 32（Xeon Platinum 8592+ 每颗 64 核）。`requirements.lock` 固定的 imageio-ffmpeg 0.7.0 自带 FFmpeg 7.0.2，已包含 libass、fontconfig 和 libx264。B200 配置的字幕字体来自系统包：
-
-```bash
-sudo apt install fonts-noto-cjk   # /usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc
-```
+成片编码和字幕烧录都在 CPU 上完成：B200 没有视频编码单元，FFmpeg 用 libx264 编码、libass 渲染字幕。编码线程数由 `media.finalize_threads` 设置，B200 配置为 32（Xeon Platinum 8592+ 每颗 64 核）。`requirements.lock` 固定的 imageio-ffmpeg 0.7.0 自带 FFmpeg 7.0.2，已包含 libass、fontconfig 和 libx264。字幕默认使用随包提供的 Noto Sans CJK SC Bold（`videopipe/fonts/`，Sans2.004 版，SIL Open Font License 1.1，许可见同目录 `LICENSE`）；wheel 和离线应用包都带有该字体，节点上不需要安装系统字体。
 
 ## 离线应用包
 

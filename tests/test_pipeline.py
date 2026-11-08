@@ -12,12 +12,6 @@ from videopipe.media import inspect_video, run_ffmpeg
 from videopipe.models import PipelineConfig, SubtitleConfig
 from videopipe.pipeline import Production
 
-CJK_FONT = next(((path, family) for path, family in (
-    (Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"), "Noto Sans CJK SC"),
-    (Path("C:/Windows/Fonts/msyhbd.ttc"), "Microsoft YaHei"),
-    (Path("/System/Library/Fonts/PingFang.ttc"), "PingFang SC"),
-) if path.is_file()), None)
-
 
 class PipelineTests(unittest.TestCase):
     def setUp(self):
@@ -131,14 +125,13 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("等一下。", (self.run_dir / state["final"]).with_name("episode.srt").read_text())
         self.assertEqual([s["attempts"] for s in state["shots"].values()], [1, 1])
 
-    @unittest.skipUnless(CJK_FONT, "needs a CJK font for libass")
     def test_burned_subtitles_stay_within_three_lines_inside_the_lower_third(self):
         for shot in self.package.shots:
             shot.width, shot.height, shot.duration = 144, 256, 1
         self.package.shots[0].prompt += (" <d>[Chinese] 我告诉你，这份合同上的每一个字都是我亲手写的，"
                                          "你以为改掉一个数字就没人发现吗？董事会明天上午九点开会，你最好想清楚该怎么解释。</d>")
         self.config.media.width, self.config.media.height = 144, 256
-        self.config.subtitles = SubtitleConfig(burn=True, font_file=CJK_FONT[0], font=CJK_FONT[1])
+        self.config.subtitles = SubtitleConfig(burn=True)
         state = Production.create(self.package, self.config, self.run_dir).run()
         final = self.run_dir / state["final"]
         self.assertTrue(state["delivery"]["burned_subtitles"])
