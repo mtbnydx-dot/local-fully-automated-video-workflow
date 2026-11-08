@@ -319,19 +319,25 @@ class Production:
 
     def _deliver(self) -> dict:
         from .media import finalize, inspect_video
+        from .subtitles import write_ass
 
         self.state["status"] = "delivering"
         self._save()
         folder = self.root / "delivery" / f"version-{self.state['assembly_version']:03d}"
-        with self.events.stage("finalize", version=self.state["assembly_version"]):
-            final = finalize(self.root / self.state["draft"], folder / "final.mp4", self._output_config())
+        output = self._output_config()
         subtitles = self.state["audio"]["subtitles"]
+        style = self.config.subtitles
+        burn = style.burn and subtitles["status"] == "complete"
+        with self.events.stage("finalize", version=self.state["assembly_version"], burn_subtitles=burn):
+            ass = write_ass(Path(subtitles["path"]), folder / "episode.ass", style, output.width, output.height) if burn else None
+            final = finalize(self.root / self.state["draft"], folder / "final.mp4", output,
+                             subtitles=ass, fonts=style.font_file.parent if burn else None)
         if subtitles.get("path"):
             shutil.copy2(subtitles["path"], folder / "episode.srt")
         info = inspect_video(final)
         self.state.update(status="complete", final=str(final.relative_to(self.root)), completed_at=now(),
                           delivery={"width": info.width, "height": info.height, "duration": info.duration,
-                                    "fps": info.fps, "has_audio": info.has_audio})
+                                    "fps": info.fps, "has_audio": info.has_audio, "burned_subtitles": burn})
         report = {"video": self.state["final"], "delivery": self.state["delivery"],
                   "shots": self.state["shots"], "audio": self.state["audio"],
                   "manifest": self.state["manifest"], "approval": self.state["approval"]}

@@ -7,6 +7,7 @@ import yaml
 from .models import AssetBinding, PipelineConfig, ScriptPackage
 from .prompts import load_prompt
 from .records import write_json
+from .subtitles import subtitle_font
 
 
 RESERVED_PARAMETERS = {
@@ -37,6 +38,9 @@ def load_config(path: Path) -> PipelineConfig:
         value = getattr(config.comfyui, name)
         if value is not None:
             setattr(config.comfyui, name, _file(path.parent, value))
+    if config.subtitles.font_file is not None:
+        # Checked when a run is planned; script export also reads this configuration on machines without the font.
+        config.subtitles.font_file = (path.parent / config.subtitles.font_file).resolve()
     if config.generator == "comfyui" and config.workers > len(config.comfyui.urls):
         raise ValueError("workers must not exceed the number of ComfyUI service URLs")
     return config
@@ -53,6 +57,10 @@ def validate_plan(package: ScriptPackage, config: PipelineConfig) -> None:
         ids = [asset.asset_id for asset in shot.asset_bindings]
         if len(ids) != len(set(ids)):
             raise ValueError(f"Shot {shot.id}: asset IDs must be unique")
+    if config.subtitles.burn:
+        if not config.subtitles.font_file.is_file():
+            raise ValueError(f"Subtitle font file does not exist: {config.subtitles.font_file}")
+        subtitle_font(config.subtitles)
     classes = []
     for path in (config.comfyui.workflow, config.comfyui.upscale_workflow):
         if path is not None:

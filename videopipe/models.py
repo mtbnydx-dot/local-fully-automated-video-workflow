@@ -89,6 +89,21 @@ class MediaConfig(InputModel):
     upscale: Literal["none", "lanczos", "comfyui"] = "comfyui"
     upscale_factor: int = Field(default=2, ge=1)
     crf: int = Field(default=18, ge=0, le=51)
+    finalize_threads: int = Field(default=2, ge=1)
+
+
+class SubtitleConfig(InputModel):
+    burn: bool = False
+    font_file: Path | None = None
+    font: str | None = None  # Family inside font_file; collections such as NotoSansCJK-Bold.ttc need it.
+    size: float = Field(default=0.035, gt=0, lt=1)  # One CJK glyph (em) as a fraction of frame height.
+    max_lines: int = Field(default=3, ge=1)
+
+    @model_validator(mode="after")
+    def burning_needs_font(self):
+        if self.burn and self.font_file is None:
+            raise ValueError("subtitles.burn requires subtitles.font_file")
+        return self
 
 
 class ScriptConfig(InputModel):
@@ -103,6 +118,7 @@ class PipelineConfig(InputModel):
     review: ReviewConfig = Field(default_factory=ReviewConfig)
     asr: ASRConfig = Field(default_factory=ASRConfig)
     media: MediaConfig = Field(default_factory=MediaConfig)
+    subtitles: SubtitleConfig = Field(default_factory=SubtitleConfig)
     script: ScriptConfig = Field(default_factory=ScriptConfig)
     max_attempts: int = Field(default=3, ge=1)
     # Read legacy configuration without restoring the removed film-review loop.

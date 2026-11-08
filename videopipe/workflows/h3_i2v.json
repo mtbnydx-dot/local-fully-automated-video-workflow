@@ -42,7 +42,7 @@
       "height": "{{height}}",
       "length": "{{frames}}",
       "first_frame": [
-        "reference",
+        "first_frame",
         0
       ]
     }
@@ -166,6 +166,19 @@
     "class_type": "LoadImage",
     "inputs": {
       "image": "{{reference_image}}"
+    }
+  },
+  "first_frame": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": [
+        "reference",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "width": "{{width}}",
+      "height": "{{height}}",
+      "crop": "center"
     }
   }
 }

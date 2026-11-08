@@ -123,6 +123,9 @@ class ComfyIntegrationTests(unittest.TestCase):
         self.assertEqual(self.server.uploads, [("reference.png", self.reference.read_bytes())])
         graph = self.server.submissions[0]["prompt"]
         self.assertEqual(graph["reference"]["inputs"]["image"], "uploaded-reference.png")
+        self.assertEqual(graph["conditioning"]["inputs"]["first_frame"], ["first_frame", 0])
+        self.assertEqual(graph["first_frame"]["inputs"], {"image": ["reference", 0], "upscale_method": "lanczos",
+                                                          "width": shot.width, "height": shot.height, "crop": "center"})
         self.assertEqual(graph["conditioning"]["inputs"]["length"], 124)
         self.assertEqual(graph["noise"]["inputs"]["noise_seed"], shot.seed)
         self.assertEqual(graph["schedule"]["inputs"]["steps"], 8)

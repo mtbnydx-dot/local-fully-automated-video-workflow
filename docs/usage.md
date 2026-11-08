@@ -82,6 +82,13 @@ media:
   height: 1024
   fps: 24
   upscale_factor: 2
+  finalize_threads: 32
+subtitles:
+  burn: true
+  font_file: /usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc
+  font: Noto Sans CJK SC
+  size: 0.035
+  max_lines: 3
 script:
   language: Chinese
   non_diegetic_music: N/A
@@ -89,7 +96,7 @@ script:
 max_attempts: 3
 ```
 
-时长上限由部署工作流能力决定，请求上限按 `frame_multiple/frame_offset` 和帧率计算。`max_attempts` 为每镜生成预算，可设置任意正整数；`upscale_factor` 为正整数，默认 2。单句 `dialogue[].language` 和单镜 `non_diegetic_music_en` 可指定各自语言和配乐。
+时长上限由部署工作流能力决定，请求上限按 `frame_multiple/frame_offset` 和帧率计算。`max_attempts` 为每镜生成预算，可设置任意正整数；`upscale_factor` 为正整数，默认 2。`finalize_threads` 为成片编码的 libx264 线程数，代码默认 2，B200 配置 32；整季逐集运行，成片编码期间 GPU 都在等待。`subtitles` 控制成片烧录字幕，代码默认关闭，B200 配置开启：`font_file` 为字体文件，路径相对配置文件解析，创建运行时检查；`.ttc` 字体集用 `font` 指定字族；`size` 为单个汉字高度占画面高度的比例，0.035 在 1152×2048 上约 72 像素，每行约 12 个汉字；`max_lines` 为每条字幕的最多行数。单句 `dialogue[].language` 和单镜 `non_diegetic_music_en` 可指定各自语言和配乐。
 
 GPT 默认参数为 `quality: max`、`complexity: high`、`native_width/height: 1152/2048`，输出单张不透明 PNG；交付直接复制 API 原图，保留原始尺寸与文件内容。HTTP 并发和在途窗口均为 140，请求超时 900 秒。按账户额度的 70% 平滑发送：105 张/分钟、210 万 TPM；单张预估 20,000 token，返回 usage 超过预估时，后续请求按观测峰值降低发送速率。TPM 是基于估算的调度预算，实际限流以服务端为准。限速在单进程内生效；已有运行继续使用保存的配置。`api.max_reference_images` 默认 GPT 16、Qwen 10；GPT 输入支持 PNG/JPEG/WebP，每张小于 50 MB，prompt 最长 32000 字符。GPT 请求使用 generations 或 edits 接口，省略 Qwen 的 steps/seed 及旧模型的 input_fidelity。每次生成请求调用一次，失败记录后可用 resume 续跑。
 
@@ -185,7 +192,7 @@ season/
 | 单集视频 | `shots/<id>/attempt-NNN/` | 参数、workflow、提交 ID、视频、审核请求/抽帧/结果、超分结果 |
 | 单集视频 | `shots/<id>/selection.json` | 选中 take、随机候选与降级原因 |
 | 单集视频 | `film/version-NNN/` | 草片、实测时间轴 `manifest.json`、`audio/` 中的转写/差异/字幕 |
-| 单集视频 | `delivery/version-NNN/` | `final.mp4`、`episode.srt`、`production_report.json` |
+| 单集视频 | `delivery/version-NNN/` | `final.mp4`（开启烧录时带硬字幕）、`episode.srt`、烧录用的 `episode.ass`、`production_report.json` |
 
 整季输出的 `runs/<episode_id>/` 是单集工作目录；`delivery/<episode_id>/` 收集成片、SRT 和报告，`delivery/logs/` 保存精简日志，`summary.json` 汇总状态，`delivery.tar.gz` 打包本次交付文件。收集器可利用已保存的 ASR `worker-result.json` 补全字幕，不重新推理。
 

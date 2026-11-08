@@ -140,7 +140,7 @@ flowchart TD
     V0["package.json + 剧本 + 图片 + 视频配置"] --> V1["校验输入，建立运行目录与快照<br/>resume 则读取已保存的输入和状态"]
     V1 --> V2["按镜头状态调度"]
     V2 -->|有预算且需新 take| V3["累计 attempts 和本轮 budget_used 加一<br/>按累计次数计算 seed，保存状态"]
-    V3 --> V20["ComfyUI 生成或查询已提交的任务"]
+    V3 --> V20["ComfyUI 生成或查询已提交的任务<br/>图生视频先把首帧居中裁切到镜头画布"]
     V2 -->|已有生成任务| V20
     V2 -->|待审核 take| V4["抽帧 + 剧本、要求、参考图<br/>单镜画面审核"]
     V20 -->|可解码输出| V4
@@ -167,8 +167,11 @@ flowchart TD
     V15 --> V16["有完整转写时进行文字台词比对<br/>保存音频、字幕和差异记录"]
     V16 --> V17{"human_approval 且未指定 auto-approve？"}
     V17 -->|是| V18["awaiting_approval<br/>等待 approve 或带 auto-approve 的 resume"]
-    V17 -->|否| V19["最终编码 + 复制 SRT + 写生产报告<br/>complete"]
-    V18 -->|收到批准| V19
+    V17 -->|否| V21{"subtitles.burn 开启且有对白？"}
+    V18 -->|收到批准| V21
+    V21 -->|是| V22["SRT 排版为 episode.ass<br/>每条至多 max_lines 行，位于画面下方三分之一"]
+    V22 --> V19["CPU 最终编码 final.mp4<br/>libx264，线程数取 media.finalize_threads<br/>有 ASS 时同一次编码烧录字幕<br/>复制 SRT + 写生产报告<br/>complete"]
+    V21 -->|否| V19
 ```
 
 图中展开镜头生产与完整交付路径；续跑时会按保存的状态跳过已完成阶段，例如已有草片、音频记录、批准或最终交付。
@@ -177,7 +180,7 @@ flowchart TD
 
 `validate` 检查输入格式、ID、引用文件、参数覆盖限制和自定义 workflow 的 API 格式；内置或识别为 H3 的 workflow 还要求 24fps、宽高可被 32 整除。`run` 校验后创建新目录，保存原始包记录、有效 `package.json`、`config.json`，并复制剧本、图片和自定义 workflow 到 `inputs/`。旧格式 `negative_prompt` 在此时合入有效 prompt；旧格式 `reference_images` 的第一张转为首帧，其余转为审核参考。
 
-生成器只把 `first_frame` 资产上传给内置图生视频 workflow；没有首帧时选择文生视频 workflow，`review_only` 图片用于审核。H3 帧数按配置对齐，默认满足 `5 + 17n`，5.875 秒、24fps 对应 141 帧。脚本导出的镜头画布、帧率和超分设置读取制作配置；默认 B200 为 576×1024、24fps，使用默认 B200 的 2 倍超分时，最终画布为 1152×2048。
+生成器只把 `first_frame` 资产上传给内置图生视频 workflow；没有首帧时选择文生视频 workflow，`review_only` 图片用于审核。H3 节点把首帧直接拉伸到画布，所以内置 workflow 先用 `ImageScale` 把首帧居中裁切并缩放到镜头画布，再交给 H3；任意比例的首帧都保持人物比例，与 CPU 预览的裁切方式一致。H3 帧数按配置对齐，默认满足 `5 + 17n`，5.875 秒、24fps 对应 141 帧。脚本导出的镜头画布、帧率和超分设置读取制作配置；默认 B200 为 576×1024、24fps，使用默认 B200 的 2 倍超分时，最终画布为 1152×2048。
 
 每镜每轮 `max_attempts` 默认为 3，可配置为任意正整数。创建 take 时先保存预算，累计 `attempts` 不归零；第 N 个 take 使用 `shot.seed + N - 1`。生成沿用快照中的 prompt 和资产，审核结果及人工 feedback 不改写生成文本。
 
@@ -203,13 +206,14 @@ flowchart TD
 | 字幕正文 | 从运行快照中的有效 `shot.prompt` 提取 `<d>…</d>`，去掉语言前缀及 `scenetrans` / `cutoff` 指令标记，保留原台词文字和标点；不从画面说明推断对白，也不以 ASR 文本替换正文 |
 | 字幕时间 | 用实测片长建立镜头时间窗。在窗内按顺序匹配归一化后的 ASR 词或整句；匹配的台词使用识别时间并裁到镜头窗内。其余台词按有效字符/词数量分配到整镜或相邻匹配台词之间；空间不足时整镜回退到剧本计时 |
 | 字幕报告 | `subtitles.json` 记录匹配与回退条目，`timing` 为 `asr`、`script`、`mixed` 或 `none`；没有对白时状态为 `no_dialogue`，仍写出空 SRT |
+| 字幕烧录 | `subtitles.burn` 开启且有对白时，交付按 SRT 生成 `episode.ass`：台词先按标点分成短语，整短语装入不超过 `max_lines` 行的字幕条，单个短语超过时才在短语内分条，时间按字数分配；行数最少、行宽均衡、优先在标点后换行。字号 `size` 为单个汉字高度占画面高度的比例，行宽占画面 80%，白字黑边、底部居中，满 `max_lines` 行时字幕块顶边落在画面下方三分之一线上 |
 | 台词文字比对 | 转写为 `complete` 时，vLLM / Qwen 接收预期对白及 ASR 的句段文本和时间，返回 `matches`、`summary`、`differences`。没有完整转写或比对服务不可用时记录 `available=false`；CPU reviewer 不调用语言模型比对 |
 
 ASR 状态、字幕计时方式与台词差异用于报告，不触发视频返工，也不决定批准。当前版本已经保存 `state.audio` 时，`resume` 会跳过音频处理；`retry` 清除下游音频状态，重新拼接后再处理。中断发生在音频状态保存之前时，续跑可能再次执行该阶段。
 
 ### 批准、返工与整季交付
 
-默认 `human_approval=false`，音频记录写完后自动交付；设为 `true` 且未传 `--auto-approve` 时进入 `awaiting_approval`。`approve` 只接受该状态。交付进行最终 H.264/AAC 编码，写入 `final.mp4`、独立的 `episode.srt` 和 `production_report.json`，不把字幕烧录进画面。
+默认 `human_approval=false`，音频记录写完后自动交付；设为 `true` 且未传 `--auto-approve` 时进入 `awaiting_approval`。`approve` 只接受该状态。交付在 CPU 上进行最终 H.264/AAC 编码（libx264；B200 没有视频编码单元），写入 `final.mp4`、独立的 `episode.srt` 和 `production_report.json`。开启 `subtitles.burn` 时同一次编码用 libass 把 `episode.ass` 烧录进画面，`delivery.burned_subtitles` 记录结果；无字幕版本即 `film/version-NNN/draft.mp4`。
 
 | 操作 | 实际作用 |
 | --- | --- |

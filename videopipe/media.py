@@ -102,15 +102,26 @@ def assemble(clips: list[Path], target: Path, config: MediaConfig) -> Path:
     return target
 
 
-def finalize(source: Path, target: Path, config: MediaConfig) -> Path:
+def finalize(source: Path, target: Path, config: MediaConfig, *, subtitles: Path | None = None,
+             fonts: Path | None = None) -> Path:
+    """Encode the delivery on the CPU, optionally burning an ASS subtitle file rendered with fonts from a directory."""
     target.parent.mkdir(parents=True, exist_ok=True)
     filters = []
     if config.upscale == "lanczos":
-        filters = ["-vf", f"scale=iw*{config.upscale_factor}:ih*{config.upscale_factor}:flags=lanczos"]
+        filters.append(f"scale=iw*{config.upscale_factor}:ih*{config.upscale_factor}:flags=lanczos")
+    if subtitles is not None:
+        filters.append(f"ass={_filter_path(subtitles)}:fontsdir={_filter_path(fonts)}")
     # A ComfyUI upscale is performed before this encoding step by production control.
     run_ffmpeg([
-        "-loglevel", "error", "-i", str(source), "-map", "0:v:0", "-map", "0:a:0?", *filters,
+        "-loglevel", "error", "-i", str(source), "-map", "0:v:0", "-map", "0:a:0?",
+        *(["-vf", ",".join(filters)] if filters else []),
         "-c:v", "libx264", "-preset", "fast", "-crf", str(config.crf), "-pix_fmt", "yuv420p",
-        "-r", str(config.fps), "-threads", "2", "-c:a", "aac", "-movflags", "+faststart", str(target),
+        "-r", str(config.fps), "-threads", str(config.finalize_threads), "-c:a", "aac", "-movflags", "+faststart",
+        str(target),
     ])
     return target
+
+
+def _filter_path(path: Path) -> str:
+    # Filter arguments are unescaped twice: the quotes keep spaces and the escaped colon keeps a drive letter.
+    return "'" + path.resolve().as_posix().replace(":", "\\:") + "'"
