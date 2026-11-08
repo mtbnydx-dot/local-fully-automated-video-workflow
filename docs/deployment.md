@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart LR
-    APP["应用环境<br/>三个 CLI / HTTP / Pillow / FFmpeg"] --> GLM["在线 GLM<br/>剧本写作与文字审核"]
+    APP["应用环境<br/>三个 CLI / HTTP / Pillow<br/>FFmpeg CPU 编码与字幕烧录"] --> GLM["在线 GLM<br/>剧本写作与文字审核"]
     APP --> IMG["在线图片任务服务"]
     APP --> C["GPU 0–6<br/>7 个 ComfyUI 实例<br/>端口 8188–8194"]
     APP --> V["GPU 7<br/>vLLM / Qwen<br/>端口 8000"]
@@ -63,6 +63,12 @@ FLASHINFER_WORKSPACE_BASE=/mnt/video-cache/vllm \
 Qwen 启动参数包括 `modelopt` 量化、CPU embedding offload、TP1、64K context 和并发 6；`review.workers` 默认也为 6。审核采用非思考模式、温度 0、结构化 JSON，默认 48 张抽帧、最长边 1024，再加参考图；`REVIEW_MAX_IMAGES` 需容纳总图片数。已有作品包的显式配置优先于代码默认值；需要保留原包时，复制运行配置、调整审核参数，通过 `run-season --config` 指定。已有运行继续读取保存的配置快照，新参数使用新的输出目录。
 
 GPU7 同时容纳常驻 vLLM 和阶段性 ASR。ASR 默认 `gpu: 7`、`compute_type: int8_float16`、超时 600 秒，模型从本地读取；显存分配和并发根据目标节点的峰值用量调整。缺少 ASR 依赖、模型或运行库时报告 `unavailable`，继续字幕粗对齐和交付。
+
+成片编码和字幕烧录都在 CPU 上完成：B200 没有视频编码单元，FFmpeg 用 libx264 编码、libass 渲染字幕。编码线程数由 `media.finalize_threads` 设置，B200 配置为 32（Xeon Platinum 8592+ 每颗 64 核）。`requirements.lock` 固定的 imageio-ffmpeg 0.7.0 自带 FFmpeg 7.0.2，已包含 libass、fontconfig 和 libx264。B200 配置的字幕字体来自系统包：
+
+```bash
+sudo apt install fonts-noto-cjk   # /usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc
+```
 
 ## 离线应用包
 

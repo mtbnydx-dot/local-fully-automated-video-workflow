@@ -20,7 +20,7 @@ flowchart LR
     ASSETS --> VP
     VP <-->|生成与超分| COMFY["ComfyUI"]
     VP <-->|画面审核与台词差异| QWEN["vLLM / Qwen"]
-    VP --> MEDIA["FFmpeg + ASR + 字幕"]
+    VP --> MEDIA["FFmpeg + ASR + 字幕<br/>CPU 编码，按配置烧录字幕"]
     MEDIA --> OUT["视频 / SRT / 生产报告"]
 ```
 
@@ -107,7 +107,7 @@ sequenceDiagram
         P->>V: 预期对白 + ASR 文本
         V-->>P: 台词差异报告
     end
-    P->>M: 自动或人工批准后最终编码
+    P->>M: 自动或人工批准后 CPU 最终编码，按配置烧录字幕
 ```
 
 B200 配置使用 7 个生成 worker、6 个审核 worker。生成与超分通过实例队列互斥占用 ComfyUI；每个审核请求独立持有 HTTP 客户端与输出目录。主循环更新生产状态；同一运行目录由一个控制进程写入。

@@ -37,6 +37,15 @@ media:
   fps: 24
   upscale: comfyui
   upscale_factor: 2
+  finalize_threads: 32  # Every GPU waits for an episode's final encode; the Xeon 8592+ has 64 cores per socket.
+# Burned subtitles: libass + libx264 on the CPU (B200 has no video encoder). Font: apt install fonts-noto-cjk.
+# size = one CJK glyph / frame height (72 px at 1152x2048); a full max_lines block reaches the top of the lower third.
+subtitles:
+  burn: true
+  font_file: /usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc
+  font: Noto Sans CJK SC
+  size: 0.035
+  max_lines: 3
 script:
   language: Chinese
   non_diegetic_music: N/A

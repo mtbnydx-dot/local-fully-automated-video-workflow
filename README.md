@@ -8,7 +8,7 @@ flowchart LR
     S --> P["剧本包 + 图片槽位"]
     P --> I["imagepipe<br/>参考图与首帧"]
     I --> V["videopipe<br/>生成、审核、超分、拼接"]
-    V --> D["视频 + SRT + 生产报告"]
+    V --> D["视频（可烧录字幕）+ SRT + 生产报告"]
 ```
 
 先看 [完整工作流](docs/workflow.md)，再看 [模块协作与代码入口](docs/architecture.md)。安装、运行和续跑见 [使用说明](docs/usage.md)，GPU 服务和离线包见 [部署说明](docs/deployment.md)。[文档索引](docs/README.md) 汇总其余入口。

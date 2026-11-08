@@ -33,7 +33,10 @@ def h3_graph(*, image_to_video):
     }
     if image_to_video:
         graph["reference"] = node("LoadImage", image="{{reference_image}}")
-        graph["conditioning"]["inputs"]["first_frame"] = ["reference", 0]
+        # H3 stretches the first frame to the canvas; a centre crop keeps people's proportions.
+        graph["first_frame"] = node("ImageScale", image=["reference", 0], upscale_method="lanczos",
+                                    width="{{width}}", height="{{height}}", crop="center")
+        graph["conditioning"]["inputs"]["first_frame"] = ["first_frame", 0]
     return graph
 
 
