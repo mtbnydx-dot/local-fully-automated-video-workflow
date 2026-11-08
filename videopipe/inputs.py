@@ -58,8 +58,8 @@ def validate_plan(package: ScriptPackage, config: PipelineConfig) -> None:
         if len(ids) != len(set(ids)):
             raise ValueError(f"Shot {shot.id}: asset IDs must be unique")
     if config.subtitles.burn:
-        if not config.subtitles.font_file.is_file():
-            raise ValueError(f"Subtitle font file does not exist: {config.subtitles.font_file}")
+        if not config.subtitles.font_path.is_file():
+            raise ValueError(f"Subtitle font file does not exist: {config.subtitles.font_path}")
         subtitle_font(config.subtitles)
     classes = []
     for path in (config.comfyui.workflow, config.comfyui.upscale_workflow):

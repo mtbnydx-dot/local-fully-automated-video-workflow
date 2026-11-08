@@ -93,11 +93,11 @@ def subtitle_font(config: SubtitleConfig) -> SubtitleFont:
     """Select the configured face; a collection file holds one face per family."""
     for index in count():
         try:
-            face = ImageFont.truetype(str(config.font_file), 1000, index=index)
+            face = ImageFont.truetype(str(config.font_path), 1000, index=index)
         except OSError:
-            raise ValueError(f"{config.font_file} has no font family {config.font!r}") from None
+            raise ValueError(f"{config.font_path} has no font family {config.font!r}") from None
         if config.font in (None, face.getname()[0]):
-            line_height, weight = _libass_metrics(config.font_file, index)
+            line_height, weight = _libass_metrics(config.font_path, index)
             return SubtitleFont(face.getname()[0], weight, line_height, face)
 
 
