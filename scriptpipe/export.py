@@ -113,7 +113,7 @@ def _compile_prompt(shot: dict, season: dict, template: str, config: ScriptConfi
         if line.get("voiceover") is True:
             dialogue_lines.append(
                 f"Turn {turn}: {identity} says in an off-screen voiceover: <d>[{language}]{text}</d> "
-                f"If visible, {character['id']}'s mouth rests during this voiceover turn."
+                f"If visible, {character['id']}'s lips remain closed during this voiceover turn."
             )
         else:
             dialogue_lines.append(
@@ -143,14 +143,24 @@ def _episode_script(episode: dict, season: dict) -> str:
         lines.extend([
             f"### {shot['id']} · {elapsed:.3f}–{end:.3f} 秒",
             "", f"场景：{shot['scene_id']} / {shot['location_id']} / {shot['time_of_day']}；出场：{cast}",
-            "", f"剧情：{shot['beat_zh']}", "", f"动作开始：{shot['action_start_zh']}", "", f"动作结束：{shot['action_end_zh']}", "",
+            "",
         ])
-        for dialogue in shot.get("dialogue", []):
-            mode = "画外音" if dialogue.get("voiceover") is True else "对白"
-            lines.extend([f"{names[dialogue['speaker_id']]}（{mode}）：{dialogue['text_zh']}", ""])
-        if not shot.get("dialogue"):
-            lines.extend(["对白：无。", ""])
-        lines.extend([f"切镜理由：{shot['cut_reason_zh']}", ""])
+        if "story_events" in shot:
+            for event in shot["story_events"]:
+                if "action_zh" in event:
+                    lines.extend([event["action_zh"], ""])
+                else:
+                    mode = "画外音" if event["voiceover"] else "对白"
+                    lines.extend([f"{names[event['speaker_id']]}（{mode}）：{event['text_zh']}", ""])
+        else:
+            lines.extend([f"剧情：{shot['beat_zh']}", "", f"动作开始：{shot['action_start_zh']}", "",
+                          f"动作结束：{shot['action_end_zh']}", ""])
+            for dialogue in shot.get("dialogue", []):
+                mode = "画外音" if dialogue.get("voiceover") is True else "对白"
+                lines.extend([f"{names[dialogue['speaker_id']]}（{mode}）：{dialogue['text_zh']}", ""])
+            if not shot.get("dialogue"):
+                lines.extend(["对白：无。", ""])
+            lines.extend([f"切镜理由：{shot['cut_reason_zh']}", ""])
         elapsed = end
     lines.extend(["## 本集结束状态", "", _text(episode.get("end_state", "")), ""])
     return "\n".join(lines)
@@ -160,6 +170,8 @@ def _season_bible(season: dict) -> str:
     lines = [f"# {season['title']} · 整季设定", "", season.get("logline", ""), "", "## 统一视觉风格", "", season["style_en"], "", "## 固定人物与服装", ""]
     for index, character in enumerate(season["characters"], start=1):
         lines.extend([f"### {character['name']} · {character['id']} · S{index}", "", character["appearance_en"], "", f"声音目标：{character['voice_en']}", ""])
+        if character.get("dramatic_profile_zh"):
+            lines.extend([f"人物与说话方式：{character['dramatic_profile_zh']}", ""])
         for wardrobe in character["wardrobes"]:
             lines.extend([f"- {wardrobe['id']}：{wardrobe['description_en']}", ""])
     for title, key in (("固定场景", "locations"), ("关键道具", "props")):
@@ -273,12 +285,14 @@ def export_season(season: dict, episodes: list[dict], out_dir: Path, config_path
 
 ## 阅读顺序
 
-1. `screenplay.md`：全季中文剧情、逐字对白与镜头起止动作。
+1. `screenplay.md`：全季中文剧情、逐字对白与正式动作。
 2. `season_bible.md` / `season.json`：固定人物、服装、声音目标、场景、道具及分集状态。
 3. `episodes/<集ID>/script.md`：单集可读剧本。
-4. `episodes/<集ID>/storyboard.json`：结构化分镜，包含首帧说明、动作状态与切镜理由。
+4. `episodes/<集ID>/storyboard.json`：结构化分镜，包含首帧、动态画面、声音与逐字对白；长链路保留正式事件引用。
 5. `episodes/<集ID>/package.json`：当前 videopipe 格式，含英文 H3 prompt 与中文对白。
 6. `image_slots.json`：全季共享参考槽位和逐镜首帧槽位；单集同名文件说明本集目标路径。
+
+长链路的开场已作为每集第一镜合入上述剧本、分镜、镜头包和图片槽位。图片与视频阶段直接读取本交付目录；`openings/` 是 scriptpipe 运行目录中的内部创作缓存。
 
 ## 补图后交接
 

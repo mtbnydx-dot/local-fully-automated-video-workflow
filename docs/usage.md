@@ -40,7 +40,9 @@ videopipe run-season /data/season --output /data/runs/video-season
 videopipe collect /data/runs/video-season
 ```
 
-模型请求默认并发 20，可通过 `--concurrency` 覆盖。当前 DeepSeek 配额为 5,000,000 TPM，每 1,000,000 TPM 允许并发 5，最大并发 25，默认取其 80%。`--notes` 可省略。短剧交付到 `<output>/delivery/`；长剧可以指定 `--delivery`，也可用 `--stop-after season|plans|drafts|review` 在阶段结束时暂停。剧本续跑使用相同命令和输出目录，复用已存阶段；调整素材、创作 brief 或模板后用新输出目录开始，避免复用旧稿。
+模型请求默认并发 20，可通过 `--concurrency` 覆盖。当前 DeepSeek 配额为 5,000,000 TPM，每 1,000,000 TPM 允许并发 5，最大并发 25，默认取其 80%。`--notes` 可省略。短剧交付到 `<output>/delivery/`；长剧可以指定 `--delivery`，也可用 `--stop-after source|season|openings|plans|drafts|review` 在阶段结束时暂停。剧本续跑使用相同命令和输出目录，复用已存阶段；调整素材、创作 brief 或模板后用新输出目录开始，避免复用旧稿。
+
+长链路也接受 `--long`。默认流程为整季规划、每集开场、正文续写、分场视听与程序导出；`--long-review report` 额外生成一次分集和整季诊断报告，默认 `off`。`--repair-rounds` 仅用于短链路。人物外观由 P1 生成，开场编剧独立生成首个片段的对白与动作，P2 从开场结束处继续写，P3 引用两段正式事件并设计首帧、摄影、发声表演和配乐。开场使用 5–10 秒范围并遵循实际单次请求上限，默认 B200 配置为 5–9.4 秒。`--stop-after openings` 会在保存所有 `openings/epXX.json` 后暂停。具体调试入口及 H3 音频指导见 [剧本 prompt 调试](scriptpipe-prompts.md)。
 
 图片的 `run` 遇到已有 `tasks.json` 会读取已存计划；目标图片存在即复用。默认运行目录为 `runs/imagepipe/<包名>/<provider>/`，按集运行再追加集范围。切换后端时使用对应运行目录；`resume` 使用原记录的后端，兼容旧 Qwen 任务。`--config` 可指定对应后端的自定义 YAML，与显式 `--provider` 保持一致。全剧包内的状态字段保留文字导出时的快照；分批交付包在图片齐备后写入实际交付状态。视频入口按实际文件是否存在校验。
 
@@ -102,7 +104,7 @@ GPT 默认参数为 `quality: max`、`complexity: high`、`native_width/height: 
 
 ## 全剧文本、分批补图与交付
 
-集数由 `--episodes` 决定，长剧每集目标时长由 `--episode-minutes` 决定。场景数、镜头数和时长由对白、动作与剧情需要决定。分场写作可以调整计划中的预计镜头数，组装时统一更新镜号和空间锚点，实际范围保存到运行目录的 `assembled_plans/`。以下 64 是调用参数示例。
+集数由 `--episodes` 决定，长剧每集目标时长由 `--episode-minutes` 决定，包含开场时长。开场编剧先生成首个片段，P2 接着输出正文的有序动作和对白事件，P3 把开场完整放入首镜并安排后续片段。场景数与正文片段数由剧情需要决定；组装时统一生成镜号和空间锚点，实际范围保存到运行目录的 `assembled_plans/`。以下 64 是调用参数示例。
 
 ```bash
 EPISODES=64
@@ -181,7 +183,7 @@ season/
 
 | 阶段 | 文件 | 看什么 |
 | --- | --- | --- |
-| 剧本 | `run.json`、`season.json`、`drafts/`；长剧另有 `plans/`、`scenes/` | 当前阶段、缓存设定与镜头稿 |
+| 剧本 | `run.json`、`season.json`、`drafts/`；长剧另有 `openings/`、`plans/`、`scenes/` | 当前阶段、缓存设定、独立开场、正文与镜头稿 |
 | 剧本 | `api/`、`checks/`、`reviews/`、`quality.json` | 请求/响应/用量、结构错误、审核意见、最终待修项 |
 | 图片 | `tasks.json`、`state.json`、`events.jsonl`、`report.json` | 冻结任务、job ID、引用失败、复用/生成/复制数量 |
 | 图片 | `originals/` 与包内资产路径 | 服务原图、统一尺寸后的可用图片 |

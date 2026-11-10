@@ -105,11 +105,12 @@ def check_episode(episode: dict, season: dict, *, config: PipelineConfig | None 
         else:
             for criterion in acceptance:
                 english(criterion, "acceptance_en", shot_id)
-        for field in ("beat_zh", "action_start_zh", "action_end_zh", "cut_reason_zh"):
-            if not isinstance(shot.get(field), str) or not shot[field].strip():
-                issue("missing_story_field", f"{field} is missing.", shot_id)
-        if not isinstance(shot.get("action_complete"), bool):
-            issue("action_complete_type", "action_complete must be a JSON boolean describing the action at the cut.", shot_id)
+        if "story_events" not in shot:
+            for field in ("beat_zh", "action_start_zh", "action_end_zh", "cut_reason_zh"):
+                if not isinstance(shot.get(field), str) or not shot[field].strip():
+                    issue("missing_story_field", f"{field} is missing.", shot_id)
+            if not isinstance(shot.get("action_complete"), bool):
+                issue("action_complete_type", "action_complete must be a JSON boolean describing the action at the cut.", shot_id)
 
         dialogue = shot.get("dialogue", [])
         if not isinstance(dialogue, list):

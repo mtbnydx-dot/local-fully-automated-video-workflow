@@ -22,49 +22,48 @@ flowchart TD
     S5 --> S6{"有 error 且仍有修正轮数？"}
     S6 -->|是| S7["按问题修正相关集<br/>合并指定镜头的补丁"]
     S7 --> S5
-    S3 -->|长剧| S8["并发分集规划<br/>检查场次、镜头编号范围与引用"]
-    S8 --> S9["并发分场写作<br/>检查后保存 scenes"]
-    S9 --> S10["按场次顺序合并各集 drafts"]
-    S10 --> S11["逐集结构检查 + LLM 分集审核<br/>在修正轮数内合并局部补丁并复核"]
-    S11 --> S12["LLM 跨集文字审核"]
-    S12 --> S13{"有 error 且仍有修正轮数？"}
-    S13 -->|是| S14["修正相关集<br/>重新分集审核发生变化的集"]
-    S14 --> S12
+    S3 -->|长剧| SO["按本集 source_ranges 取原文<br/>每集独立创作开场，保存 openings"]
+    SO --> S8["该集开场完成后，P2 接着续写正文<br/>保存 plans，程序合并两段 events"]
+    S8 --> S9["按本场定稿与相关资产设计视听<br/>首镜完整承载开场，生成首帧与配乐"]
+    S9 --> S10["程序回填台词、服装与中文事件<br/>编号、检查并合并各集 drafts"]
+    S10 --> S11{"long-review 模式"}
+    S11 -->|off 默认| S15
+    S11 -->|report| S12["P4 每集一次 + P5 整季一次<br/>保存诊断报告"]
     S6 -->|否| S15["汇总最终检查与审核记录"]
-    S13 -->|否| S15
+    S12 --> S15
     S15 --> S16["导出剧本、图片槽位、镜头包和视频配置<br/>保存 quality.json 与运行状态"]
     S16 --> S17["图片待生成<br/>交给 imagepipe"]
 ```
 
 ### 写作与检查
 
-短剧默认 12 集，长剧默认 8 集，由 `--episodes` 配置。长剧每集目标分钟数由 `--episode-minutes` 配置（默认 5）。场景、镜头数量和镜头时长由内容决定；长剧分场写作可拆分或合并计划节拍，组装时统一编号并更新锚点和实际场次范围，保存到 `assembled_plans/`。长短剧共用制作配置的 `comfyui.maximum_duration_seconds`，默认 10 秒；按当前 24fps、5+17n 帧对齐，brief 中请求上限为 9.4 秒。视频交付使用生成结果的实测时长。
+短剧默认 12 集，长剧默认 8 集，由 `--episodes` 配置。长剧每集目标分钟数由 `--episode-minutes` 配置（默认 5），包含开场时长。长剧每集先写独立开场，P2 只写开场之后的正式事件；程序合并两段，P3 把开场完整放入首个片段并安排后续视听。场景数量与正文片段数量由内容决定，组装时统一编号并更新锚点和实际场次范围，保存到 `assembled_plans/`。长短剧共用制作配置的 `comfyui.maximum_duration_seconds`，默认 10 秒；按当前 24fps、5+17n 帧对齐，brief 中请求上限为 9.4 秒。开场请求时长范围为 5 秒至单次请求上限与 10 秒的较小值。视频交付使用生成结果的实测时长。
 
-代码检查覆盖字段类型、非空说明、唯一 ID、人物/服装/地点/道具引用和配置中的工作流时长上限。对白按发言顺序记录，可有多轮、多位说话者，长度和语速由创作决定。action_complete 记录切镜时的实际布尔状态，acceptance_en 可为空；英文描述可引用剧情需要的中文专名或文字。LLM 文字审核依据实际对白、动作、因果和连续性提出问题。
+代码检查覆盖字段类型、非空说明、唯一 ID、人物/服装/地点/道具引用和配置中的工作流时长上限。对白按发言顺序记录，可有多轮、多位说话者，长度和语速由创作决定。长剧从 events 解析逐字对白与中文动作，旧短剧仍使用原动作说明字段；英文描述可引用剧情需要的中文专名或文字。LLM 文字审核依据实际对白、动作、因果和连续性提出问题。
 
 修正与请求重试有三种计数：
 
 | 机制 | 当前行为 |
 | --- | --- |
-| 文字审核后的局部修正 | `--repair-rounds` 默认 2，可配置为非负整数。短剧用于整季审核循环；长剧用于分集审核循环与跨集审核循环，跨集修正后还会复核变化的集 |
-| 长剧结构校正 | 分集规划、分场写作和修正补丁各最多生成 3 次，携带上一版结构错误再请求；仍有结构错误则抛出异常，运行记为 `failed` |
+| 文字审核后的局部修正 | 短剧的 `--repair-rounds` 默认 2。长剧默认关闭 LLM 审核，`--long-review report` 只生成一次报告 |
+| 长剧结构校正 | 开场、分集正文与分场视听各最多生成 3 次，携带上一版结构错误再请求；仍有结构错误则抛出异常，运行记为 `failed` |
 | LLM 请求重试 | 每次 `complete` 最多请求 3 次，处理 HTTP、输出截断、JSON 等错误；请求、响应、用量和错误保存到 `api/` |
 
-局部补丁只能替换已有镜头 ID，未指定的镜头保留；可更新集标题、梗概、开始/结束状态。通用合并函数支持列出所有原镜头的 `shot_order`，长剧保留局部补丁的镜头数量、观看顺序和场景归属，并允许调整时长。审核循环只因 `severity=error` 触发修正。
+短剧局部补丁替换指定的已有镜头，可更新集标题、梗概、开始/结束状态，审核循环只因 `severity=error` 触发。长剧采纳诊断意见后，在对应 P1、开场、P2 或 P3 创作源修改并重建下游；独立 P6 修补 prompt 已移除。
 
 ### 导出、状态与续跑
 
-导出器将人物、服装、镜头内容、声音描述和对白编译为 H3 prompt；对白按顺序写入 `<d>[语言]原台词</d>`，默认语言来自 `script.language`，单句 `language` 可覆盖；配乐和画面文字要求来自 `script` 配置。每镜绑定一张 `first_frame`，人物、地点、道具参考绑定为 `review_only`。导出只创建文本、清单与资产目录，图片文件由后续阶段写入。
+导出器将人物、服装、镜头内容、声音描述和对白编译为 H3 prompt；对白按顺序写入 `<d>[语言]原台词</d>`，长剧从开场与 P2 的正式原文及 `script.language` 装配，旧格式可按句指定 `language`。长剧 P3 每镜填写 `non_diegetic_music_en`，缺省配乐和画面文字要求来自 `script` 配置。每镜绑定一张 `first_frame`，人物、地点、道具参考绑定为 `review_only`。导出只创建文本、清单与资产目录，图片文件由后续阶段写入。
 
 | 位置 | 主要内容 |
 | --- | --- |
-| 剧本运行目录 | `run.json`、`source.cleaned.txt`、`season.json`、`drafts/`、`reviews/`、`quality.json`、`api/`；长剧另有 `creative_brief.json`、`plans/`、`scenes/`、`checks/`、`patches/`、`rejected/`、`review_inputs/` 等阶段记录 |
+| 剧本运行目录 | `run.json`、`source.cleaned.txt`、`season.json`、`drafts/`、`reviews/`、`quality.json`、`api/`；长剧另有 `source.paragraphs.json`、`creative_brief.json`、`openings/`、`plans/`、`scenes/`、`checks/`、`assembled_plans/`、`rejected/`、`review_inputs/` 等阶段记录 |
 | 导出根目录 | `overview.json`、`season.json`、`season_bible.md`、`screenplay.md`、`image_slots.json`、`quality.json` |
 | `episodes/<集ID>/` | `script.md`、`storyboard.json`、`package.json`、`image_slots.json`、`production.yaml` |
 
 完成检查且导出成功后，`run.json.status` 为 `text_ready` 或 `needs_text_revision`，未消除的错误列在 `quality.json.open_errors`。导出索引相应为 `text_complete_images_pending` 或 `needs_text_revision_images_pending`，`render_ready` 初始为 `false`；文字审核仍有错误时，代码也会导出可导出的包并保留这些记录。
 
-`scriptpipe` 没有单独的 `resume` 子命令，重新使用同一输出目录运行会复用阶段文件。短剧复用已有 `season.json` 和 `drafts`，重新进入审核；长剧会检查缓存的分集规划和分场结果，并在审核输入与保存的输入相同时复用对应审核。长剧支持 `--stop-after season|plans|drafts|review`，其中 `review` 在写完 `quality.json` 后、导出前停止。短剧导出到 `<output>/delivery`；长剧可用 `--delivery` 指定交接目录。
+`scriptpipe` 没有单独的 `resume` 子命令，重新使用同一输出目录运行会复用阶段文件。短剧复用已有 `season.json` 和 `drafts`，重新进入审核；长剧会检查缓存的开场、正文和分场结果，并在审核输入与保存的输入相同时复用对应审核。长剧支持 `--stop-after source|season|openings|plans|drafts|review`；`openings` 保存各集开场后停止，`review` 在写完 `quality.json` 后、导出前停止。短剧导出到 `<output>/delivery`；长剧可用 `--delivery` 指定交接目录。
 
 代码依据：[入口](../scriptpipe/cli.py)、[短剧流程](../scriptpipe/pipeline.py)、[长剧流程](../scriptpipe/long_pipeline.py)、[通用检查](../scriptpipe/checks.py)、[长剧检查](../scriptpipe/long_checks.py)、[导出](../scriptpipe/export.py)、[LLM 请求](../scriptpipe/llm.py)。
 

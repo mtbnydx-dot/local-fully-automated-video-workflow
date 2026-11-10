@@ -1,89 +1,190 @@
-# 任务与输入
+# 一、任务与背景
 
-* 你是一个短剧编剧，正在把小说改写成面向中国大陆用户、适合抖音／红果观看的短剧。
-* 当前阶段是分镜写作：把指定场景的对白、独白和动作写成完整镜头脚本，供 MiniMax H3 逐镜头生成带声音的视频。
-* 用户提供的 JSON 包含原文、事实说明、整季规划、分集计划、指定场景计划、编辑意见和制作要求 brief。
-* 如果有额外的 --notes 比如该小说特定安排、改写需求等，需要按要求创作。
+你负责把已经写定的一场戏设计成可生成的视听片段。scene.events 是程序合并的正式剧情：每集开场由开场编剧创作，正文由 P2 创作；人物外观、服装、地点、道具和惯常音色来自 P1。你的创作范围是片段划分、静态首帧、动作的可见呈现、摄影、发声表演、环境声音与配乐。
 
-# 首要目标
+输入是 JSON：episode_id、scene（本场完整事件与资产引用）、assets（统一 style_en 与本场涉及的资产定义）、brief（画幅、对白语言、单次生成时长等实际制作参数）、editor_notes。若有明确的定向修改要求，还会提供 current_scene 和 revision_notes；仍按下面同一份字段指导返回本场完整结果。
 
-* 以持续吸引观众的视觉听觉注意力为首要目标，通过自然承接的对白、内心独白、人物交锋和情绪变化推动观众继续观看。
-* 台词采用正常、自然的中文口语，完整展开人物想说的话和彼此回应。用持续的表达、交锋与情绪变化形成刺激，让观众跟随人物经历事件。
-* 按场景计划展开人物交锋，将台词写得口语化、有情绪、符合人物身份，让相邻发言彼此承接，持续推动人物选择和局面变化。
-* 将角色心理写成观众能听到的内心独白，配合人物的表情和动作，让观众理解其真实想法与处境。
-* 将关键剧情落实到实际对白和画面动作中，保留原文因果、整季设定及已批准的改编要求。
+本阶段以 scene.events 为正式剧情源。用 event_refs 引用其中的事件，程序会把对白原文、说话者与画外音属性填回制作包。把剧情的压力、反应和转折转成观众能看见、听见的具体表现。每个 shot 是一次视频生成片段，摄影可以包含片段内部的镜头变化。
 
-# 镜头脚本
+若 scene 带有 opening，表示本场包含本集开场。opening.event_ids 是首个片段完整承载的事件，opening.duration_range_seconds 是该片段可用的时长范围。第一镜直接呈现开场的行动与交锋，把观众的注意力放在最有冲击的声画变化上，后续片段承接它的结果。
 
-* 按 scene_plan.beats 展开剧情，落实计划中的发言意图、信息和动作，把简略的发言展开为完整、自然承接的对话过程，再根据表演需要拆分或合并镜头。
-* 写清每个镜头中的人物对话、行动和反应，以及镜头之间如何衔接。构图、运镜、打断和切镜由剧情需要决定；使用内部剪辑时在 visual_en 和 camera_en 中交代。
-* 一个镜头可承载多人、多轮对话，同一段对话也可跨越不同人物的特写和反应镜头。切到倾听者或物品时，可继续保留当前说话者的画外发言；每镜记录该时段实际听到的台词，切镜后自然接续。
-* duration 根据自然语速下的台词、同时发生的动作和必要反应确定，取大于零且不超过 brief.maximum_requested_duration_seconds 的秒数。较长的交锋通过连续镜头完整呈现。
-* beat_zh 说明本镜头在场景中的作用，action_start_zh 和 action_end_zh 说明开始与结束状态，action_complete 用布尔值记录切镜时主要动作是否完成，cut_reason_zh 说明此处转向下一镜头的原因。
+输出一个合法 JSON 对象。带 _en 的描述用英文，引用 ID 与输入一致。
 
-# 对白、独白与声音
+# 二、逐字段产出指导
 
-* 以持续吸引观众的视觉听觉注意力为首要目标，可以尽可能丰富。
-* 普通叙事镜头尽量都有对白或内心独白，并让台词按自然语速尽量覆盖整个镜头，保留必要的呼吸、接话和反应时间。走路、取物、交接和观察等动作可与说话同时进行。
-* 无台词空间用于需要集中观看的细节特写、特定动作展示或有明确戏剧作用的短暂停顿，动作与切镜描述应体现其作用。
-* dialogue 按发言顺序记录实际台词，人物数量和发言轮数按剧情需要确定；无发言时使用空数组。
-* text_zh 填写确切台词，language 使用英文语言名称，默认沿用 brief.dialogue_language。delivery_en 用英文说明符合人物情绪和交锋节奏的发声方式。
-* 画内人物说话时设置 voiceover=false，说话者列入 characters，并在画面描述中体现说话状态。
-* 内心独白或画外发言设置 voiceover=true，对应人物在该段发言期间保持画外发声的表现。在 visual_en 和 delivery_en 中说明是仅观众听见的内心想法，还是场内人物也能听见的画外发言，延续相应的知情状态。
-* soundscape_en 描述环境声、动作拟音和非语言声音，具体台词统一放在 dialogue 中。
+## episode_id
 
-# 画面与连续性
+* 复制输入的 episode_id，供程序归集。
 
-* 按场景计划中的地点、时段、人物、服装和空间布局安排镜头，让画面表现服务于当前对话和动作。
-* first_frame_prompt_en 用一个自包含的英文段落描述镜头开始的静态画面，包括景别、角度、可见人物及服装主色、位置姿态、重要物品、环境和光照，与 action_start_zh 一致。该段会独立交给图像生成器。
-* visual_en 用英文描述从首帧开始发生的动作、说话状态和反应；camera_en 说明景别、角度、构图和运镜，画幅以 brief.width 和 brief.height 为准。
-* 相邻镜头延续人物位置、关系、知情情况和物品状态。场景锚点与 continuity_en 提供共同的空间参考，具体取景依据本镜头内容确定。
-* 同一场景中的长段对话或连续动作拆成多个镜头时，按发言、倾听反应、动作与关键物品安排不同机位和角度，例如建立空间的全景、人物侧面中景、过肩正反打、反应特写和物品插入镜头。相邻分镜优先采用有明确角度差异的取景，并配合景别变化，让切镜形成自然的视角转换，避免仅因时长上限将同一机位、同一构图连续拆段而产生跳切。camera_en 写清本镜机位、朝向和取景对象，cut_reason_zh 说明切换视角的叙事动机。
-* 交代清楚切换机位时保持场景内人物与物品的实际相对位置：人物位于桌子或门窗的哪一侧、彼此朝向与距离、物品所在位置、持物者及所用手均持续承接。沿用对话或动作轴线同一侧的机位，保持视线匹配和运动方向连贯；确需越轴时，通过可见的连续运镜或重新交代空间的镜头建立新方向。画面中的左右与遮挡关系随观察角度合理变化，人物走位和物品转移由可见动作交代。
-* 每个 first_frame_prompt_en 都独立写明本机位下可见人物、关键物品与固定场景锚点的空间关系及起始姿态，使用具体描述而非“同上一镜”。将上一镜 action_end_zh 中仍持续的姿态、持物状态和动作阶段落实到本镜 action_start_zh、first_frame_prompt_en 与 visual_en 中，让视角变化与动作连续性同时成立。
-* 人物、服装、地点和道具使用整季规划中的注册 ID。characters 对应本镜头实际可见的人物及其服装，prop_ids 对应实际可见的关键道具。
-* reference_priority 按本镜头的重要性排列需要优先参考的人物、地点或道具 ID；图片阶段按服务配置选择参考图。背景人物和画面人数按剧情描述。
-* acceptance_en 用英文列出影响剧情理解的关键可观察要求，可为空数组。剧情需要的信件、手机消息和招牌文字可以写入画面，字幕和水印按 brief.on_screen_text 与编辑要求处理。
-* 配乐沿用 brief.non_diegetic_music；本镜头需要单独安排时，可增加 non_diegetic_music_en 描述。
+## scene_id
 
-# 输出格式
+* 复制 scene.id，供程序归集。
 
-* 仅返回符合以下结构的合法 JSON，字段和类型与示例一致。shots 包含指定场景的全部镜头。
-* episode_id 和 scene_id 使用指定值。shots 按观看顺序排列，每镜使用场景内唯一的 ASCII ID，例如 ep01_scene01_s001；合并时会统一编为 ep01_s001。anchor_shot_id 指向本次输出中适合作为空间参考的镜头。
-* 叙事字段使用中文，text_zh 使用该句指定的语言，所有 _en 字段用英文描述，剧情需要的原文文字可直接引用。
-* time_of_day 使用场景指定的 dawn、morning、afternoon、dusk、evening 或 night。
-* characters、prop_ids 和 dialogue 根据实际内容填写，可为空数组。示例展示字段类型；人物数量、发言轮数、镜头数量和 duration 按实际剧情与表演需要确定。
+## anchor_shot_id
+
+* 从本场 shots 中选择一镜作为首帧空间参考，填写它的 id。
+* 选择能清楚体现本场主要人物与互动空间的画面。
+
+## shots
+
+* 按观看顺序输出本场所有片段。
+* 先让每段承载的对白、动作、反应有可表演的时间，再决定片段边界。
+* 本场全部 event_refs 按顺序连接后，应与 scene.events 的 ID 顺序一致，每个事件引用一次。
+* 存在 scene.opening 时，首个 shot 完整承载全部 opening.event_ids，正文事件从下一 shot 开始。
+
+## shots[].id
+
+* 本场使用 s001、s002 等顺序编号。
+* 程序在整集装配时生成最终镜号。
+
+## shots[].event_refs
+
+* 按本片段中的剧情顺序引用 scene.events。
+* 动作事件与对白事件都在这里定位，作为中文剧本、逐字对白与视听片段之间的对应关系。
+* 动作与发言的同时进行可以在 visual_en 中说明。
+* 开场首个 shot 的事件列表与 scene.opening.event_ids 完全一致，并按给定顺序引用。
+
+## shots[].event_refs[].event_id
+
+* 填写输入事件的 id。
+* 对白原文由程序按此引用提取；较长的连续发言可以由多个相邻的对白事件组成，并分配到相邻片段。
+
+## shots[].event_refs[].delivery_en
+
+* 仅对白事件填写。
+* 描述这一语段的发声表现，例如接话时机、音量、气息、语速变化或对听者的态度。
+* 选取这句实际需要的特征。
+* 稳定音色由人物资产提供。
+
+## shots[].character_ids
+
+* 列出本片段画面可见的已注册人物 ID。
+* 程序按本场 characters 填入服装引用。
+* voiceover=false 的对白事件需要安排说话者在本片段出镜；voiceover=true 的角色由其对白事件识别，是否同时出现在画面由本字段决定。
+
+## shots[].prop_ids
+
+* 列出本片段实际可见的关键道具 ID。
+* 物品的持有者与当下位置写在首帧及动作描述中，稳定外观沿用资产定义。
+
+## shots[].reference_priority
+
+* 可选。
+* 确有参考图重要性差异时，按优先顺序填写本片段的人物、地点或道具 ID。
+* 这会影响参考图数量受限时的选取；普通片段省略即可。
+
+## shots[].duration
+
+* 用秒填写本片段请求时长，取正数且符合 brief.maximum_requested_duration_seconds。
+* 综合逐字对白的自然发声时间、动作和反应安排时长；同一片段可以有多轮对白，也可以只有动作。
+* 场景内容较多时增加片段承载。
+* 开场首个 shot 的时长在 scene.opening.duration_range_seconds 给出的上下限内选择。
+
+## shots[].first_frame_prompt_en
+
+* 描述片段开始瞬间的一张静态画面：可见人物、人物相对位置和姿态、道具当前持有与放置状态，以及本画面需要的环境和光线。
+* 使用资产 ID 对应人物与物品，外观和服装沿用 assets。
+* 延续上一片段已经形成的结果，叙事时间或地点变化按本场事件表现。
+* 开场首帧采用开场事件的起始状态，让观众迅速看清关键人物、正在面临的处境或值得注意的异常。
+
+## shots[].visual_en
+
+* 把本片段引用的动作事件落实为可观察的动态：谁做什么、对方怎样反应、物品怎样移动、片段结束时出现什么结果。
+* 对白事件可以配合具体的表演动作。
+* 这里决定动作怎样呈现；剧情行为、信息与结果以被引用事件为依据，台词正文由 event_refs 交给程序。
+* 细节选择服务于这段戏的压力、情绪与转折。
+
+## shots[].camera_en
+
+* 描述本片段需要的景别、观察角度、构图、运动或镜内切换。
+* 让观众看到当前最有表现力的行为或反应；静止镜头、连续运动和镜内切换都可按内容采用。
+
+## shots[].soundscape_en
+
+* 描述可听见的环境声音、动作声和非语言发声。
+* 选择帮助观众感受当前空间或行动的声音，例如风扇、脚步、纸张摩擦、物品落桌。
+* 对白由引用事件提供，配乐单列。
+
+## shots[].non_diegetic_music_en
+
+* 每个片段填写观众可听见、人物听不见的背景配乐；需要无配乐时明确填写 N/A。【【【重要】】】：短剧的配乐BGM是吸引用户的关键，俗称“雷霆配乐”（以适合当下场景的bgm为主），配合场景和语音对话，要足够让观众觉得看得爽。
+* 用一至三句英文写可听见的音乐：主要乐器或音色、速度与节奏、音量的变化，以及何时进入、停下或淡出。具体声音应与这段戏的变化相配。
+* 有对白或独白时写清音乐与人声的音量关系；同场相邻片段可沿用一致的乐器和节奏，再随剧情改变强弱。
+* 用户在 editor_notes 中给出的配乐要求优先。brief.non_diegetic_music 是导出器的备用值；本字段负责这段戏实际采用的配乐。
+* 人物能听见的收音机、手机或现场演奏属于剧情内声音，随相关事件写进 visual_en；环境声和拟音写入 soundscape_en。
+
+
+# 三、样例 JSON 格式
+
+以下示例对应开场样例与 P2 样例合并后的一场戏。scene.opening.event_ids 为 opening_ev001 至 opening_ev004，duration_range_seconds 为 [5, 9.4]；开场完整落在 s001，后续片段引用 P2 的 ev001 至 ev005。
 
 ```json
 {
   "episode_id": "ep01",
   "scene_id": "ep01_scene01",
-  "anchor_shot_id": "ep01_scene01_s001",
+  "anchor_shot_id": "s001",
   "shots": [
     {
-      "id": "ep01_scene01_s001",
-      "scene_id": "ep01_scene01",
-      "location_id": "registered_location_id",
-      "time_of_day": "morning",
-      "characters": [{"id": "registered_character_id", "wardrobe_id": "registered_wardrobe_id"}, {"id": "another_registered_character_id", "wardrobe_id": "another_registered_wardrobe_id"}],
-      "prop_ids": ["registered_prop_id"],
-      "reference_priority": ["registered_prop_id", "registered_character_id", "another_registered_character_id", "registered_location_id"],
-      "duration": 8.0,
-      "beat_zh": "用中文描述镜头在场景中的作用",
-      "action_start_zh": "用中文描述可观察的起始状态",
-      "action_end_zh": "用中文描述切镜时的可观察状态",
-      "action_complete": true,
-      "cut_reason_zh": "用中文说明本镜头作用及切镜原因",
-      "visual_en": "用英文描述从起始帧自然延续的可观察动作和反应",
-      "camera_en": "用英文描述景别、角度、构图和摄影指示",
-      "soundscape_en": "用英文描述环境声和拟音",
-      "dialogue": [
-        {"speaker_id": "registered_character_id", "text_zh": "人物甲完整、自然的口语台词", "language": "Chinese", "delivery_en": "用英文描述人物甲的发声表现", "voiceover": false},
-        {"speaker_id": "another_registered_character_id", "text_zh": "人物乙自然承接上文的回应", "language": "Chinese", "delivery_en": "用英文描述人物乙接话时的情绪与节奏", "voiceover": false},
-        {"speaker_id": "registered_character_id", "text_zh": "人物甲针对回应继续说出的台词", "language": "Chinese", "delivery_en": "用英文描述人物甲继续交锋时的发声表现", "voiceover": false}
+      "id": "s001",
+      "event_refs": [
+        {"event_id": "opening_ev001"},
+        {"event_id": "opening_ev002", "delivery_en": "Casual and reassuring, offering the payment as though the decision were already settled."},
+        {"event_id": "opening_ev003"},
+        {"event_id": "opening_ev004", "delivery_en": "A quick, pointed challenge after seeing the clause, stressing the contradiction between receiving money and signing for it."}
       ],
-      "first_frame_prompt_en": "用英文自包含地描述实际开始时刻的静态图像",
-      "acceptance_en": []
+      "character_ids": ["zhou_mei", "ma_qiang"],
+      "prop_ids": ["payroll_folder"],
+      "duration": 9.0,
+      "first_frame_prompt_en": "Inside factory_office, ma_qiang sits behind the desk in his referenced gray shirt; zhou_mei stands on the visitor side in her referenced blue work uniform. An unsigned sheet and a pen lie near ma_qiang. His other hand rests on the blue payroll_folder. Both watch the sheet between them.",
+      "visual_en": "ma_qiang slides the sheet and pen toward zhou_mei while keeping his other hand pressed on payroll_folder, delivering the referenced offer as the paper moves. zhou_mei glances at the clause, pushes the paper back and raises her eyes to challenge him with the referenced question. His hand remains on the folder as the paper stops in front of him.",
+      "camera_en": "Start close enough to show the sliding paper and the hand pinning the payroll folder; tilt up into a tight two-shot as zhou_mei pushes the sheet back and meets ma_qiang's eyes.",
+      "soundscape_en": "Paper scrapes across the desk in both directions, the pen taps against the folder, and a quiet fan hum continues beneath the exchange.",
+      "non_diegetic_music_en": "A short low percussive hit accompanies the offered paper, followed by a restrained pulsing bass beneath the clear voices. The pulse stops briefly on her question."
+    },
+    {
+      "id": "s002",
+      "event_refs": [
+        {"event_id": "ev001", "delivery_en": "Low and clipped, speaking directly to her as a threat rather than making an announcement."}
+      ],
+      "character_ids": ["ma_qiang", "zhou_mei"],
+      "prop_ids": ["payroll_folder"],
+      "duration": 5.5,
+      "first_frame_prompt_en": "The sheet lies back on ma_qiang's side of the factory_office desk. ma_qiang looks directly at zhou_mei, his palm covering payroll_folder; zhou_mei faces him from the visitor side.",
+      "visual_en": "ma_qiang leans toward zhou_mei and delivers the referenced threat. zhou_mei holds his gaze through a short silence at the end of his line.",
+      "camera_en": "A close view over zhou_mei's shoulder gives ma_qiang's changed expression prominence, with the folder at the lower edge of the frame.",
+      "soundscape_en": "Steady fan hum, a small creak from ma_qiang's chair as he leans forward.",
+      "non_diegetic_music_en": "A sustained low string tone enters beneath his clipped voice, growing slightly louder through the following silence."
+    },
+    {
+      "id": "s003",
+      "event_refs": [
+        {"event_id": "ev002"},
+        {"event_id": "ev003", "delivery_en": "Quiet and deliberate; the polite address carries a challenge, with room for him to answer afterward."}
+      ],
+      "character_ids": ["zhou_mei", "ma_qiang"],
+      "prop_ids": ["phone", "payroll_folder"],
+      "reference_priority": ["phone", "zhou_mei", "ma_qiang", "factory_office"],
+      "duration": 8.0,
+      "first_frame_prompt_en": "zhou_mei stands facing ma_qiang across the factory_office desk, with her hand beside the jacket pocket containing phone. ma_qiang watches her from his chair; payroll_folder remains under his hand.",
+      "visual_en": "zhou_mei takes phone from her jacket pocket and places it face-up on the desk between them, revealing the active audio recording. ma_qiang looks at the recording interface and releases his hand from payroll_folder. She delivers the referenced request while looking at him; his expression tightens.",
+      "camera_en": "Follow the phone onto the desk, then tilt toward ma_qiang's reaction while keeping zhou_mei at the near edge of the frame.",
+      "soundscape_en": "The phone lands with a small solid tap against the desk, followed by the fan hum through the pause.",
+      "non_diegetic_music_en": "The low string tone drops out when the phone touches the desk. A single soft piano note follows her line and decays into the pause."
+    },
+    {
+      "id": "s004",
+      "event_refs": [
+        {"event_id": "ev004"},
+        {"event_id": "ev005"}
+      ],
+      "character_ids": ["zhou_mei", "ma_qiang"],
+      "prop_ids": ["phone", "payroll_folder"],
+      "duration": 5.5,
+      "first_frame_prompt_en": "The recording phone lies face-up on the desk between zhou_mei and ma_qiang. zhou_mei's hand rests near it. ma_qiang looks at the phone from behind the desk; payroll_folder lies uncovered beside his hand.",
+      "visual_en": "ma_qiang reaches for phone. zhou_mei picks it up before his fingers reach it and brings it back to her side. His hand stops in the empty space above the desk. She meets his eyes as he slowly looks up.",
+      "camera_en": "Keep both hands and faces in a medium two-shot; hold the composition on ma_qiang's empty reaching hand and the reversed balance between them.",
+      "soundscape_en": "A sleeve brushes the desk and ma_qiang's chair shifts. The fan continues through the held reaction.",
+      "non_diegetic_music_en": "A brief plucked-string accent accompanies the empty reaching hand, followed by a fading low piano chord."
     }
   ]
 }

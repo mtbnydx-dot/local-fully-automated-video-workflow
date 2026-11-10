@@ -20,7 +20,7 @@ def _references(scene, season, episode_id, issues):
     if not isinstance(location_id, str) or location_id not in locations:
         _issue(issues, "unknown_location", f"Scene {scene_id}: unknown location_id {location_id!r}.", episode_id,
                suggested_fix="Use a location id registered in season.locations.")
-    cast = scene.get("characters", [])
+    cast = scene.get("characters")
     if not isinstance(cast, list):
         _issue(issues, "cast_type", f"Scene {scene_id}: characters must be a list.", episode_id,
                suggested_fix="Use a list of {id, wardrobe_id} objects.")
@@ -40,7 +40,7 @@ def _references(scene, season, episode_id, issues):
         if member.get("wardrobe_id") not in wardrobes:
             _issue(issues, "unknown_wardrobe", f"Scene {scene_id}: unknown wardrobe {member.get('wardrobe_id')!r} for {character_id}.", episode_id,
                    suggested_fix="Use a wardrobe registered under this character.")
-    prop_ids = scene.get("prop_ids", [])
+    prop_ids = scene.get("prop_ids")
     if not isinstance(prop_ids, list):
         _issue(issues, "props_type", f"Scene {scene_id}: prop_ids must be a list.", episode_id,
                suggested_fix="Use a list of registered prop ids, or an empty list.")
@@ -82,60 +82,148 @@ def _shot_layout(shots, episode_id, first_number, issues, scene_id=None):
                    "Use the enclosing scene_plan.id for every shot in this scene.")
 
 
-def check_long_plan(plan: dict, season: dict, episode_plan: dict) -> list[dict]:
-    """Check references and estimated shot ranges in the episode plan."""
+def check_opening(opening: dict, season: dict, episode_plan: dict) -> list[dict]:
+    """Validate opening drama with the same event and asset contract as the body."""
+    if not isinstance(opening, dict):
+        issues = []
+        _issue(issues, "opening_type", "Return an opening object with episode_id and events.", episode_plan["id"])
+        return issues
+    scene = {**opening, "id": f"{episode_plan['id']}_scene01"}
+    issues = check_long_plan({"id": opening.get("episode_id"), "scenes": [scene]}, season, episode_plan)
+    if not issues and any(not event["id"].startswith("opening_ev") for event in opening["events"]):
+        _issue(issues, "opening_event_id", "Use opening_ev001, opening_ev002, etc. for opening events.", episode_plan["id"])
+    return issues
+
+
+def check_long_plan(plan: dict, season: dict, episode_plan: dict, *, opening: dict | None = None) -> list[dict]:
+    """Check formal drama at its authoring boundary, including an optional continuation."""
     issues = []
-    episode_id = episode_plan.get("id", "")
+    episode_id = episode_plan["id"]
     if not isinstance(plan, dict):
-        _issue(issues, "plan_type", "The episode scene plan must be an object.", episode_id,
-               suggested_fix="Return {id, title, synopsis, start_state, end_state, scenes}.")
+        _issue(issues, "plan_type", "Return an object with id and scenes.", episode_id)
         return issues
     if plan.get("id") != episode_id:
-        _issue(issues, "plan_episode_id", f"Plan id must be {episode_id!r}.", episode_id,
-               suggested_fix="Use the id from the season episode outline.")
-    if episode_id not in [e.get("id") for e in season.get("episodes", []) if isinstance(e, dict)]:
-        _issue(issues, "unknown_episode", f"Episode {episode_id!r} is not in the season outline.", episode_id,
-               suggested_fix="Use the matching season.episodes entry as episode_plan.")
+        _issue(issues, "plan_episode_id", f"Plan id must be {episode_id!r}.", episode_id)
     scenes = plan.get("scenes")
     if not isinstance(scenes, list) or not scenes:
-        _issue(issues, "scenes_type", "Plan scenes must be a nonempty list.", episode_id,
-               suggested_fix="Return the planned scene objects in story order.")
+        _issue(issues, "scenes_type", "scenes must be a nonempty list.", episode_id)
         return issues
+    characters = {item["id"] for item in season["characters"]}
     seen = set()
-    first = 1
-    for index, scene in enumerate(scenes):
+    for scene in scenes:
         if not isinstance(scene, dict):
-            _issue(issues, "scene_type", f"Scene {index + 1} must be an object.", episode_id,
-                   suggested_fix="Return a scene with its id, references, shot range and beats.")
+            _issue(issues, "scene_type", "Each scene must be an object.", episode_id)
             continue
         scene_id = scene.get("id")
         if not isinstance(scene_id, str) or not scene_id.strip():
-            _issue(issues, "scene_id", f"Scene {index + 1} needs a nonempty string id.", episode_id,
-                   suggested_fix="Assign a stable scene id and reuse it in the scene output.")
+            _issue(issues, "scene_id", "Each scene needs a nonempty id.", episode_id)
         elif scene_id in seen:
-            _issue(issues, "duplicate_scene_id", f"Scene id {scene_id!r} is duplicated.", episode_id,
-                   suggested_fix="Give each planned scene a distinct stable id.")
+            _issue(issues, "duplicate_scene_id", f"Scene {scene_id!r} is duplicated.", episode_id)
         else:
             seen.add(scene_id)
-        beats = scene.get("beats")
-        if not isinstance(beats, list) or not beats:
-            _issue(issues, "scene_beat_count", f"Scene {scene_id} needs a nonempty list of beats.", episode_id,
-                   suggested_fix="Write the scene's dialogue and action developments in viewing order.")
-            _references(scene, season, episode_id, issues)
-            continue
-        last = scene.get("last_shot_number")
-        if type(scene.get("first_shot_number")) is not int or scene["first_shot_number"] != first or type(last) is not int or last < first:
-            _issue(issues, "scene_shot_range", f"Scene {scene_id}: estimated range must begin at {first} and end at or after it.", episode_id,
-                   suggested_fix="Use consecutive estimated ranges; the writer will choose the actual shot count.")
-            _references(scene, season, episode_id, issues)
-            continue
-        anchor = scene.get("anchor_shot_number")
-        if anchor is not None and (type(anchor) is not int or not first <= anchor <= last):
-            _issue(issues, "scene_anchor", f"Scene {scene_id}: anchor must be a shot number from {first} to {last}.", episode_id,
-                   suggested_fix="Choose a useful spatial reference within this scene's estimated range.")
+        if not isinstance(scene.get("time_of_day"), str) or not scene["time_of_day"].strip():
+            _issue(issues, "time_of_day", f"Scene {scene_id}: supply time_of_day.", episode_id)
         _references(scene, season, episode_id, issues)
-        first = last + 1
+        cast = scene.get("characters", [])
+        visible = {member["id"] for member in cast
+                   if isinstance(member, dict) and isinstance(member.get("id"), str)} if isinstance(cast, list) else set()
+        events = scene.get("events")
+        if not isinstance(events, list) or not events:
+            _issue(issues, "scene_events", f"Scene {scene_id}: events must be a nonempty list.", episode_id)
+            continue
+        event_ids = set()
+        for event in events:
+            if not isinstance(event, dict):
+                _issue(issues, "event_type", f"Scene {scene_id}: each event must be an object.", episode_id)
+                continue
+            event_id = event.get("id")
+            if not isinstance(event_id, str) or not event_id.strip() or event_id in event_ids:
+                _issue(issues, "event_id", f"Scene {scene_id}: event IDs must be nonempty and unique.", episode_id)
+            else:
+                event_ids.add(event_id)
+                if opening is not None and event_id.startswith("opening_"):
+                    _issue(issues, "opening_event_rewritten", "Write only the continuation using ev001, ev002, etc.; opening events are inserted by the program.", episode_id)
+            action, dialogue = "action_zh" in event, "text_zh" in event
+            if action == dialogue:
+                _issue(issues, "event_content", f"Event {event_id}: supply either action_zh or dialogue text_zh.", episode_id)
+                continue
+            field = "action_zh" if action else "text_zh"
+            if not isinstance(event[field], str) or not event[field].strip():
+                _issue(issues, "event_content", f"Event {event_id}: {field} must contain the formal text.", episode_id)
+            if dialogue:
+                speaker = event.get("speaker_id")
+                if not isinstance(speaker, str) or speaker not in characters:
+                    _issue(issues, "unknown_speaker", f"Event {event_id}: use a registered speaker_id.", episode_id)
+                if not isinstance(event.get("voiceover"), bool):
+                    _issue(issues, "voiceover_type", f"Event {event_id}: voiceover must be a boolean.", episode_id)
+                elif event["voiceover"] is False and isinstance(speaker, str) and speaker not in visible:
+                    _issue(issues, "speaker_not_visible", f"Event {event_id}: include the speaking character in this scene's cast.", episode_id)
+    if opening is not None and not issues:
+        opening_scene_id = f"{episode_id}_scene01"
+        for index, scene in enumerate(scenes):
+            if scene["id"] != opening_scene_id:
+                continue
+            if index != 0:
+                _issue(issues, "opening_scene_order", f"Continue {opening_scene_id} as the first body scene; use a new id for later scenes.", episode_id)
+            for field in ("location_id", "time_of_day"):
+                if scene[field] != opening[field]:
+                    _issue(issues, "opening_scene_changed", f"The opening scene's {field} is {opening[field]!r}; use scene02 for a new location or time.", episode_id)
+            if any(member not in scene["characters"] for member in opening["characters"]):
+                _issue(issues, "opening_cast_changed", "Keep the opening's characters and wardrobes in the continued scene; add other cast as needed.", episode_id)
+            if not set(opening["prop_ids"]) <= set(scene["prop_ids"]):
+                _issue(issues, "opening_props_changed", "Keep the opening's props in the continued scene; add other props as needed.", episode_id)
     return issues
+
+
+def resolve_scene(scene: dict, scene_plan: dict, *, language: str) -> dict:
+    """Resolve P3 references into formal drama and the existing production shot shape."""
+    if not isinstance(scene, dict) or not isinstance(scene.get("shots"), list) or not scene["shots"]:
+        raise ValueError("Return a scene object with a nonempty shots list")
+    events = {event["id"]: event for event in scene_plan["events"]}
+    wardrobes = {member["id"]: member["wardrobe_id"] for member in scene_plan["characters"]}
+    resolved, event_ids = [], []
+    for raw in scene["shots"]:
+        if not isinstance(raw, dict):
+            raise ValueError("Each shot must be an object")
+        refs = raw.get("event_refs")
+        if not isinstance(refs, list) or not refs:
+            raise ValueError(f"{raw.get('id')}: event_refs must contain the scene events used by this shot")
+        cast = raw.get("character_ids")
+        if not isinstance(cast, list) or any(not isinstance(cid, str) or cid not in wardrobes for cid in cast):
+            raise ValueError(f"{raw.get('id')}: character_ids must reference this scene's visible characters")
+        props = raw.get("prop_ids", [])
+        if not isinstance(props, list) or any(not isinstance(pid, str) or pid not in scene_plan["prop_ids"] for pid in props):
+            raise ValueError(f"{raw.get('id')}: prop_ids must reference this scene's props")
+        if "non_diegetic_music_en" not in raw:
+            raise ValueError(f"{raw.get('id')}: supply non_diegetic_music_en, using N/A for no score")
+        story, dialogue = [], []
+        for ref in refs:
+            if not isinstance(ref, dict) or not isinstance(ref.get("event_id"), str) or ref["event_id"] not in events:
+                raise ValueError(f"{raw.get('id')}: each event_ref must point to an existing scene event")
+            event = events[ref["event_id"]]
+            event_ids.append(event["id"])
+            story.append(event)
+            if "text_zh" in event:
+                dialogue.append({"speaker_id": event["speaker_id"], "text_zh": event["text_zh"],
+                                 "voiceover": event["voiceover"], "language": language,
+                                 "delivery_en": ref.get("delivery_en", "")})
+        fields = ("id", "event_refs", "reference_priority", "duration", "first_frame_prompt_en",
+                  "visual_en", "camera_en", "soundscape_en", "non_diegetic_music_en")
+        resolved.append({**{key: raw[key] for key in fields if key in raw}, "prop_ids": props,
+                         "scene_id": scene_plan["id"], "location_id": scene_plan["location_id"],
+                         "time_of_day": scene_plan["time_of_day"],
+                         "characters": [{"id": cid, "wardrobe_id": wardrobes[cid]} for cid in cast],
+                         "story_events": story, "dialogue": dialogue})
+    if event_ids != [event["id"] for event in scene_plan["events"]]:
+        raise ValueError("Across shots, event_refs must use every scene event exactly once in its original order")
+    if opening := scene_plan.get("opening"):
+        if [event["id"] for event in resolved[0]["story_events"]] != opening["event_ids"]:
+            raise ValueError("The first shot must contain exactly opening.event_ids, in order, as one complete clip")
+        low, high = opening["duration_range_seconds"]
+        duration = resolved[0].get("duration")
+        if not isinstance(duration, (int, float)) or not low <= duration <= high:
+            raise ValueError(f"The opening shot duration must be within {low:g}–{high:g} seconds")
+    return {**scene, "shots": resolved}
 
 
 def check_scene(scene: dict, scene_plan: dict, episode_plan: dict, season: dict, *, config=None) -> list[dict]:
@@ -158,7 +246,7 @@ def check_scene(scene: dict, scene_plan: dict, episode_plan: dict, season: dict,
         _issue(issues, "shots_type", "Scene shots must be a list.", episode_id,
                suggested_fix="Return the scene's shot objects in viewing order.")
         return issues
-    if scene.get("anchor_shot_id") is not None and scene["anchor_shot_id"] not in [shot.get("id") for shot in shots if isinstance(shot, dict)]:
+    if scene.get("anchor_shot_id") not in [shot.get("id") for shot in shots if isinstance(shot, dict)]:
         _issue(issues, "scene_anchor", "anchor_shot_id must refer to a shot in this scene.", episode_id,
                suggested_fix="Select one of the returned shots as the spatial reference.")
     episode = {"id": episode_id, "title": episode_plan.get("title", episode_id), "shots": shots}
