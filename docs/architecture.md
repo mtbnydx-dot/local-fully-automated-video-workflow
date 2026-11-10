@@ -31,7 +31,7 @@ flowchart LR
 | 入口 / 模块 | 负责什么 |
 | --- | --- |
 | [scriptpipe/cli.py](../scriptpipe/cli.py) | 选择短剧 / 长剧，注入原文、notes、集数、并发和导出配置 |
-| [pipeline.py](../scriptpipe/pipeline.py)、[long_pipeline.py](../scriptpipe/long_pipeline.py) | 短剧按集写；长剧按场写，先分集再整季审核；缓存中间结果并合并局部补丁 |
+| [pipeline.py](../scriptpipe/pipeline.py)、[long_pipeline.py](../scriptpipe/long_pipeline.py) | 短剧按集写并审核修补；长剧每集独立写开场再续写正文、按场设计视听、程序解析引用并保留首镜开场边界，默认直接导出，支持一次诊断报告 |
 | [checks.py](../scriptpipe/checks.py)、[long_checks.py](../scriptpipe/long_checks.py) | ID / 引用、对白、语言、动作字段、场次与镜头分配、计划时长检查 |
 | [llm.py](../scriptpipe/llm.py) | LLM 流式请求、并发信号量、JSON 解析、请求/响应/用量记录与技术重试 |
 | [export.py](../scriptpipe/export.py) | 编译 H3 prompt、人物与资产 ID，导出单集包、图片清单和整季索引 |
