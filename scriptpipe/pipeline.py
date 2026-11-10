@@ -31,7 +31,8 @@ def compact_episode(episode: dict) -> dict:
     fields = ("id", "scene_id", "location_id", "time_of_day", "characters", "prop_ids",
               "duration", "beat_zh", "action_start_zh", "action_end_zh", "action_complete",
               "cut_reason_zh", "visual_en", "camera_en", "soundscape_en",
-              "first_frame_prompt_en", "acceptance_en", "dialogue", "reference_priority", "non_diegetic_music_en")
+              "first_frame_prompt_en", "acceptance_en", "dialogue", "reference_priority", "non_diegetic_music_en",
+              "story_events", "event_refs")
     return {**{k: v for k, v in episode.items() if k != "shots"},
             "shots": [{k: s[k] for k in fields if k in s} for s in episode.get("shots", [])]}
 

@@ -18,14 +18,16 @@ def main() -> None:
     parser.add_argument("--key-name", help="Default: DEEPSEEK-KEY; GLMKEY for glm models")
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument("--episodes", type=int, help="Default: 8 for long-form, otherwise 12")
-    parser.add_argument("--long-form", action="store_true", help="Write the complete season in scene-sized calls")
+    parser.add_argument("--long-form", "--long", action="store_true", help="Write the complete season in scene-sized calls")
+    parser.add_argument("--long-review", choices=("off", "report"), default="off",
+                        help="Long-form: optional one-pass LLM reports, without automatic rewriting (default: off)")
     parser.add_argument("--episode-minutes", type=float, default=5,
                         help="Long-form runtime target per episode; scene/shot counts follow the story (default: 5)")
     parser.add_argument("--delivery", type=Path, help="Long-form handoff directory, e.g. /data/season")
-    parser.add_argument("--stop-after", choices=("season", "plans", "drafts", "review"), help="Save the selected long-form stage and exit")
+    parser.add_argument("--stop-after", choices=("season", "openings", "plans", "drafts", "review"), help="Save the selected long-form stage and exit")
     parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY,
                         help=f"Maximum simultaneous model requests (default: {DEFAULT_CONCURRENCY})")
-    parser.add_argument("--repair-rounds", type=int, default=2)
+    parser.add_argument("--repair-rounds", type=int, default=2, help="Automatic repair rounds for short-form only")
     parser.add_argument("--reasoning-effort", choices=("low", "high", "max"), default="high")
     parser.add_argument("--review-reasoning-effort", choices=("low", "high", "max"),
                         help="Defaults to --reasoning-effort")
@@ -51,10 +53,10 @@ def main() -> None:
                 from .long_pipeline import run_long
                 result = await run_long(args.source, args.output, client,
                                         episode_count=args.episodes, episode_minutes=args.episode_minutes,
-                                        repair_rounds=args.repair_rounds,
                                         production_config=args.production_config, notes_path=args.notes,
                                         delivery=args.delivery, stop_after=args.stop_after,
-                                        review_reasoning_effort=args.review_reasoning_effort)
+                                        review_reasoning_effort=args.review_reasoning_effort,
+                                        long_review=args.long_review)
             else:
                 from .pipeline import run
                 result = await run(args.source, args.output, client,

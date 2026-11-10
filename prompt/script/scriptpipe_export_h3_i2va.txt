@@ -1,12 +1,10 @@
 For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
 
 integrated_multimodal_description: [Shot 1] {style}
-Start from <Picture 1>, retaining the described identities, wardrobe, set and lighting. Follow the visual and camera descriptions for action, reactions, cuts and transitions. Speak the quoted dialogue in its specified language.
 {subjects}
 {visual}
 {camera}
 {dialogue}
-Carry forward the established spatial relationships and object states as the scene develops. Match performance and pacing to the dialogue and conflict.
 {on_screen_text}
 
 overall_soundscape: {soundscape}
