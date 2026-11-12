@@ -16,7 +16,7 @@ import httpx
 from .client import ImageClient
 from .delivery import copy_asset, deliver_original
 from .models import CopyTask, ImageConfig, ImagePlan, ImageTask
-from .tool_bridge import prepare_tool_args
+from .tool_bridge import ReferenceSheetCache, prepare_tool_args
 
 
 async def run(plan: ImagePlan, config: ImageConfig, run_dir: Path) -> dict:
@@ -30,6 +30,7 @@ class ImagePipeline:
         self.tasks = {task.asset_id: task for task in plan.tasks}
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.hardlink = config.asset_copy_mode == "hardlink"
+        self.sheet_cache = ReferenceSheetCache(self.run_dir / "reference_sheet_cache") if self.hardlink else None
         state_path = self.run_dir / "state.json"
         self.state = json.loads(state_path.read_text()) if state_path.exists() else {
             "started_at": time.time(), "tasks": {},
@@ -132,6 +133,7 @@ class ImagePipeline:
             references.append(native if native.is_file() else Path(self.tasks[ref].target_path))
         tool_args = await asyncio.to_thread(
             prepare_tool_args, task.prompt, references, self.run_dir / "reference_sheets" / task.asset_id,
+            sheet_cache=self.sheet_cache,
         )
         request_path = self.run_dir / "requests" / f"{task.asset_id}.json"
         response_path = self.run_dir / "responses" / f"{task.asset_id}.json"
