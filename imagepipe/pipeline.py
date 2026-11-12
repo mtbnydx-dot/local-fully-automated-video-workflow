@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import shutil
 import time
 from collections import Counter
 from contextlib import AsyncExitStack
@@ -15,7 +14,7 @@ from pathlib import Path
 import httpx
 
 from .client import ImageClient
-from .delivery import deliver_original
+from .delivery import copy_asset, deliver_original
 from .models import CopyTask, ImageConfig, ImagePlan, ImageTask
 from .tool_bridge import prepare_tool_args
 
@@ -30,6 +29,7 @@ class ImagePipeline:
         self.plan, self.config, self.run_dir = plan, config, run_dir.resolve()
         self.tasks = {task.asset_id: task for task in plan.tasks}
         self.run_dir.mkdir(parents=True, exist_ok=True)
+        self.hardlink = config.asset_copy_mode == "hardlink"
         state_path = self.run_dir / "state.json"
         self.state = json.loads(state_path.read_text()) if state_path.exists() else {
             "started_at": time.time(), "tasks": {},
@@ -63,7 +63,7 @@ class ImagePipeline:
         if target.is_file():
             original = self.run_dir / "originals" / f"{task.asset_id}.png"
             if original.is_file():
-                record.update(await asyncio.to_thread(deliver_original, original, target))
+                record.update(await asyncio.to_thread(deliver_original, original, target, hardlink=self.hardlink))
             record.update(status="completed", reused=not bool(record.get("completed_at") or record.get("job_id")),
                           path=str(target))
             self._event("reused", task.asset_id)
@@ -92,7 +92,7 @@ class ImagePipeline:
             await self._generate_qwen(task, record, original)
         delivery_started = time.time()
         dimensions = await asyncio.to_thread(
-            deliver_original, original, Path(task.target_path),
+            deliver_original, original, Path(task.target_path), hardlink=self.hardlink,
         )
         finished = time.time()
         record.update(
@@ -148,7 +148,7 @@ class ImagePipeline:
             await asyncio.sleep(self.config.scheduler.poll_interval_seconds)
         response = json.loads(response_path.read_text())
         original.parent.mkdir(parents=True, exist_ok=True)
-        await asyncio.to_thread(shutil.copy2, response["image_path"], original)
+        await asyncio.to_thread(copy_asset, response["image_path"], original, hardlink=self.hardlink)
         record.update(status="delivering", original=str(original), tool="image_gen.imagegen",
                       tool_image_path=response["image_path"])
         self._event("generated", task.asset_id, tool=record["tool"])
@@ -209,7 +209,7 @@ class ImagePipeline:
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
             if source != target:
-                shutil.copy2(source, target)
+                copy_asset(source, target, hardlink=self.hardlink)
             copied += 1
         return copied, missing
 

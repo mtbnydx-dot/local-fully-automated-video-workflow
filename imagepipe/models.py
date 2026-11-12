@@ -38,6 +38,7 @@ class SchedulerConfig(BaseModel):
 
 class ImageConfig(BaseModel):
     provider: Literal["gpt", "qwen", "codex"] = "gpt"
+    asset_copy_mode: Literal["copy", "hardlink"] = "copy"
     api: APIConfig = Field(default_factory=APIConfig)
     generation: GenerationConfig = Field(default_factory=GenerationConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)

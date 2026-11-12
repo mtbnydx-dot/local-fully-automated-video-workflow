@@ -86,8 +86,30 @@ class ScriptBatchTests(unittest.TestCase):
         self.assertTrue(report["success"])
         self.assertEqual(report["generated"], 0)
         self.assertEqual(report["reused"], len(plan.tasks))
-        result = export_batch(self.canonical, output, episode_ids, [task.asset_id for task in plan.tasks])
+        result = export_batch(self.canonical, output, episode_ids, [task.asset_id for task in plan.tasks],
+                              hardlink_images=self.image_config.asset_copy_mode == "hardlink")
         return plan, result
+
+    def test_hardlink_batch_shares_images_and_copies_editable_metadata(self):
+        self.image_config.asset_copy_mode = "hardlink"
+        output = self.root / "linked-delivery"
+        plan, summary = self.supply_images_and_export(["ep01", "ep02"], output)
+        for task in plan.tasks:
+            source = Path(task.target_path)
+            self.assertTrue(source.samefile(output / source.relative_to(self.canonical)))
+        for episode in summary["episodes"]:
+            relative = Path(episode["package"])
+            self.assertFalse((output / relative).samefile(self.canonical / relative))
+            package = load_package(output / relative)
+            for shot in package.shots:
+                for asset in shot.asset_bindings:
+                    self.assertTrue(asset.path.samefile(self.canonical / asset.path.relative_to(output)))
+        self.assertFalse((output / "season.json").samefile(self.canonical / "season.json"))
+        source = Path(plan.tasks[0].target_path)
+        destination = output / source.relative_to(self.canonical)
+        before = destination.read_bytes()
+        source.unlink()
+        self.assertEqual(destination.read_bytes(), before)
 
     def test_first_batch_is_portable_and_preserves_canonical_ids_seeds_and_images(self):
         output = self.root / "delivery-ep01-ep02"

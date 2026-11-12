@@ -52,6 +52,7 @@ class CodexImagePipelineTests(unittest.TestCase):
             config.api.env_file = str(root / "missing.env")
             config.scheduler.max_active_jobs = 2
             config.scheduler.poll_interval_seconds = 0.01
+            config.asset_copy_mode = "hardlink"
             run_dir = root / "run"
 
             async def wait_for_requests(expected):
@@ -93,6 +94,9 @@ class CodexImagePipelineTests(unittest.TestCase):
             self.assertEqual((root / "episode/identity.png").read_bytes(), targets["identity"].read_bytes())
             for name in ("first", "parallel", "dependent"):
                 self.assertEqual(targets[name].read_bytes(), generated.read_bytes())
+                self.assertTrue(targets[name].samefile(generated))
+                self.assertTrue((run_dir / "originals" / f"{name}.png").samefile(generated))
+            self.assertTrue((root / "episode/identity.png").samefile(targets["identity"]))
             records = json.loads((run_dir / "state.json").read_text())["tasks"]
             self.assertEqual(records["dependent"]["attempts"], 1)
             self.assertEqual(records["dependent"]["tool"], "image_gen.imagegen")

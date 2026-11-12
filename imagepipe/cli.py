@@ -89,6 +89,7 @@ def main() -> int:
             report["delivery"] = export_batch(
                 Path(plan.package_root), Path(batch["delivery"]), batch["episode_ids"],
                 [task.asset_id for task in plan.tasks],
+                hardlink_images=config.asset_copy_mode == "hardlink",
             )
             (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(report, ensure_ascii=False, indent=2))

@@ -4,10 +4,30 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from imagepipe.delivery import deliver_image
+from imagepipe.delivery import copy_asset, deliver_image, deliver_original
 
 
 class ImageDeliveryTests(unittest.TestCase):
+    def test_hardlink_delivery_preserves_bytes_and_replaces_only_target_entry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original, replacement, target, other = [root / name for name in
+                                                      ("original.png", "replacement.png", "target.png", "other.png")]
+            Image.new("RGB", (18, 32), "red").save(original)
+            Image.new("RGB", (18, 32), "blue").save(replacement)
+            deliver_original(original, target, hardlink=True)
+            copy_asset(original, other, hardlink=True)
+            self.assertTrue(original.samefile(target))
+            copy_asset(original, target, hardlink=True)
+            before = original.read_bytes()
+            deliver_original(replacement, target, hardlink=True)
+            self.assertTrue(replacement.samefile(target))
+            self.assertTrue(original.samefile(other))
+            self.assertEqual(other.read_bytes(), before)
+            replacement.unlink()
+            with Image.open(target) as image:
+                self.assertEqual(image.getpixel((0, 0)), (0, 0, 255))
+
     def test_reference_canvas_is_center_cropped_and_original_preserved(self):
         with tempfile.TemporaryDirectory() as directory:
             original = Path(directory) / "original.png"

@@ -6,6 +6,7 @@ import re
 import shutil
 from pathlib import Path
 
+from imagepipe.delivery import copy_asset
 from videopipe.inputs import load_package
 
 from .llm import write_json
@@ -21,7 +22,8 @@ def parse_episode_range(value: str) -> list[str]:
     return [f"ep{number:02}" for number in range(start, end + 1)]
 
 
-def export_batch(package: Path, output: Path, episode_ids: list[str], asset_ids: list[str]) -> dict:
+def export_batch(package: Path, output: Path, episode_ids: list[str], asset_ids: list[str], *,
+                 hardlink_images: bool = False) -> dict:
     """Keep IDs, prompts, seeds and image bytes identical to the canonical package."""
     package, output = package.resolve(), output.resolve()
     overview = json.loads((package / "overview.json").read_text(encoding="utf-8"))
@@ -35,13 +37,18 @@ def export_batch(package: Path, output: Path, episode_ids: list[str], asset_ids:
             raise ValueError(f"Batch image is missing: {slot['path']}")
 
     output.mkdir(parents=True, exist_ok=True)
+    def copy_file(source, target):
+        if Path(source).suffix.lower() == ".png":
+            return copy_asset(source, target, hardlink=hardlink_images)
+        return shutil.copy2(source, target)
+
     for name in ("season.json", "season_bible.md", "quality.json"):
         if (package / name).is_file():
             shutil.copy2(package / name, output / name)
     scripts = [f"# {overview['title']} · {episode_ids[0]}–{episode_ids[-1]}", ""]
     for episode in episodes:
         relative_dir = Path(episode["package"]).parent
-        shutil.copytree(package / relative_dir, output / relative_dir, dirs_exist_ok=True)
+        shutil.copytree(package / relative_dir, output / relative_dir, dirs_exist_ok=True, copy_function=copy_file)
         scripts.append((output / relative_dir / "script.md").read_text(encoding="utf-8"))
         slots_path = output / relative_dir / "image_slots.json"
         episode_slots = json.loads(slots_path.read_text(encoding="utf-8"))
@@ -52,7 +59,7 @@ def export_batch(package: Path, output: Path, episode_ids: list[str], asset_ids:
     for slot in shared + frames:
         destination = output / slot["path"]
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(package / slot["path"], destination)
+        copy_asset(package / slot["path"], destination, hardlink=hardlink_images)
     write_json(output / "image_slots.json", {
         "status": "images_ready",
         "shared_assets": [{**slot, "status": "ready"} for slot in shared],
