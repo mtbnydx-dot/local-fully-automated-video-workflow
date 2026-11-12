@@ -244,18 +244,19 @@ async def run_long(source_path: Path, out: Path, client: GLMClient, *,
 
 
 def source_excerpt(plan: dict, paragraphs: list[dict]) -> list[dict]:
-    """Resolve the P1 source selection at the input boundary, keeping original text."""
+    """Resolve P1 selections in source order, keeping the selected original text."""
     ranges = plan.get("source_ranges")
     if not isinstance(ranges, list) or not ranges:
         raise ValueError(f"{plan['id']}: source_ranges must contain paragraph ranges")
-    result, previous_end = [], 0
     for bounds in ranges:
         if (not isinstance(bounds, list) or len(bounds) != 2
                 or any(type(number) is not int for number in bounds)):
             raise ValueError(f"{plan['id']}: source_ranges entries must be [start, end] integers")
-        start, end = bounds
+    result, previous_end = [], 0
+    # P1 may list a flashback after a later passage; extraction follows source order.
+    for start, end in sorted(ranges):
         if not previous_end < start <= end <= len(paragraphs):
-            raise ValueError(f"{plan['id']}: source_ranges must be ordered, nonoverlapping and within the numbered source")
+            raise ValueError(f"{plan['id']}: source_ranges must be nonoverlapping and within the numbered source")
         result.extend(paragraphs[start - 1:end])
         previous_end = end
     return result

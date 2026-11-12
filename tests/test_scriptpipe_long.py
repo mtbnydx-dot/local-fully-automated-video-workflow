@@ -160,6 +160,14 @@ class LongScriptTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "within the numbered source"):
             source_excerpt({"id": "ep01", "source_ranges": [[2, 4]]}, paragraphs)
 
+    def test_source_ranges_restore_source_order_without_changing_the_plan(self):
+        paragraphs = [{"id": i, "text": text} for i, text in enumerate(("前情", "过渡", "当前事件"), 1)]
+        plan = {"id": "ep46", "source_ranges": [[3, 3], [1, 1]]}
+        self.assertEqual(source_excerpt(plan, paragraphs), [paragraphs[0], paragraphs[2]])
+        self.assertEqual(plan["source_ranges"], [[3, 3], [1, 1]])
+        with self.assertRaisesRegex(ValueError, "nonoverlapping"):
+            source_excerpt({"id": "ep46", "source_ranges": [[2, 3], [1, 2]]}, paragraphs)
+
     def test_long_season_allows_different_scene_counts_and_shot_counts(self):
         episodes = [episode_fixture("ep01", (2, 3)), episode_fixture("ep02", (1,)),
                     episode_fixture("ep03", (4, 1, 2))]
