@@ -30,6 +30,11 @@ env/
 .wan22_workflow_config.json
 github_upload/
 
+# Google Drive OAuth client configuration and cached authorization
+client_secret*.json
+google-drive-credentials.json
+.google-drive/
+
 # ComfyUI local data. Keep these out of GitHub.
 models/
 input/

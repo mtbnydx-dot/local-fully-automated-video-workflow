@@ -1,13 +1,43 @@
 """Exchange native image-tool requests and completed local images."""
 
 import json
+import threading
 from contextlib import ExitStack
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from .delivery import copy_asset
 
-def prepare_tool_args(prompt: str, references: list[Path], sheets_dir: Path) -> dict:
+
+class ReferenceSheetCache:
+    """Reuse identical, labelled full-resolution reference panels within a run."""
+
+    def __init__(self, directory: Path):
+        self.directory = directory
+        self.index_path = directory / "index.json"
+        self.index = json.loads(self.index_path.read_text()) if self.index_path.exists() else {}
+        self.lock = threading.Lock()
+
+    def render(self, group: list[Path], start: int) -> Path:
+        sources = [(str(path.resolve()), path.stat().st_size, path.stat().st_mtime_ns) for path in group]
+        key = json.dumps([start, sources], ensure_ascii=False)
+        with self.lock:
+            name = self.index.get(key, f"sheet_{len(self.index) + 1:05d}.png")
+            path = self.directory / name
+            if key in self.index and path.is_file():
+                return path
+            self.directory.mkdir(parents=True, exist_ok=True)
+            _render_reference_sheet(group, start, path)
+            self.index[key] = name
+            pending = self.index_path.with_suffix(".json.tmp")
+            pending.write_text(json.dumps(self.index, ensure_ascii=False, indent=2) + "\n")
+            pending.replace(self.index_path)
+            return path
+
+
+def prepare_tool_args(prompt: str, references: list[Path], sheets_dir: Path, *,
+                      sheet_cache: ReferenceSheetCache | None = None) -> dict:
     arguments = {"prompt": prompt, "transparent_background": False}
     if len(references) <= 5:
         if references:
@@ -23,22 +53,14 @@ def prepare_tool_args(prompt: str, references: list[Path], sheets_dir: Path) -> 
         count = group_size + (sheet_index < extra)
         group = references[cursor:cursor + count]
         path = sheets_dir / f"sheet_{sheet_index + 1:02d}.png"
-        with ExitStack() as stack:
-            images = [stack.enter_context(Image.open(source)) for source in group]
-            mode = "RGBA" if any("A" in source.getbands() or "transparency" in source.info for source in images) else "RGB"
-            sheet = Image.new(mode, (sum(source.width for source in images), max(source.height for source in images) + 64), "white")
-            draw = ImageDraw.Draw(sheet)
-            font = ImageFont.load_default(size=24)
-            offset = 0
-            labels = []
-            for panel_index, source in enumerate(images):
-                reference_number = cursor + panel_index + 1
-                sheet.paste(source, (offset, 64))
-                draw.text((offset + 8, 16), f"Reference {reference_number}", fill="black", font=font)
-                position = ("left" if panel_index == 0 else "right") if count == 2 else f"panel {panel_index + 1} from left"
-                labels.append(f"original reference {reference_number} ({position})")
-                offset += source.width
-            sheet.save(path, compress_level=1)
+        if sheet_cache is None:
+            _render_reference_sheet(group, cursor, path)
+        else:
+            copy_asset(sheet_cache.render(group, cursor), path, hardlink=True)
+        labels = []
+        for panel_index in range(count):
+            position = ("left" if panel_index == 0 else "right") if count == 2 else f"panel {panel_index + 1} from left"
+            labels.append(f"original reference {cursor + panel_index + 1} ({position})")
         paths.append(str(path))
         mapping.append(f"Attached image {sheet_index + 1}: " + ", ".join(labels) + ".")
         cursor += count
@@ -50,6 +72,21 @@ def prepare_tool_args(prompt: str, references: list[Path], sheets_dir: Path) -> 
         + "\n\nOriginal system image prompt:\n" + prompt
     )
     return arguments
+
+
+def _render_reference_sheet(group: list[Path], start: int, path: Path) -> None:
+    with ExitStack() as stack:
+        images = [stack.enter_context(Image.open(source)) for source in group]
+        mode = "RGBA" if any("A" in source.getbands() or "transparency" in source.info for source in images) else "RGB"
+        sheet = Image.new(mode, (sum(source.width for source in images), max(source.height for source in images) + 64), "white")
+        draw = ImageDraw.Draw(sheet)
+        font = ImageFont.load_default(size=24)
+        offset = 0
+        for index, source in enumerate(images):
+            sheet.paste(source, (offset, 64))
+            draw.text((offset + 8, 16), f"Reference {start + index + 1}", fill="black", font=font)
+            offset += source.width
+        sheet.save(path, compress_level=6)
 
 
 def pending_requests(run_dir: Path) -> list[dict]:

@@ -37,6 +37,7 @@ def main() -> None:
             "repository": str(repository),
             "model": args.model,
             "reasoning_effort": args.effort,
+            "session_persistence": "ephemeral; worker events, results and imagepipe receipts are retained",
             "quality_requested": "high",
             "observed_image_tool": "image_gen.imagegen",
             "observed_quality_parameter_available": False,
@@ -80,7 +81,7 @@ def _unassigned_requests(handoff: dict, run_dir: Path, assigned: set[str], episo
 
 def _worker_command(directory: Path, repository: Path, model: str, effort: str) -> str:
     arguments = [
-        "codex", "exec", "--model", model, "--enable", "image_generation",
+        "codex", "exec", "--ephemeral", "--model", model, "--enable", "image_generation",
         "-c", f'model_reasoning_effort="{effort}"',
         "-c", 'approval_policy="never"',
         "--sandbox", "danger-full-access", "--cd", str(repository),

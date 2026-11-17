@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import errno
+import os
 import shutil
+import time
 from pathlib import Path
 
 from PIL import Image
@@ -39,12 +42,30 @@ def deliver_image(original: Path, target: Path, width: int, height: int, resize_
     }
 
 
-def deliver_original(original: Path, target: Path) -> dict:
+def copy_asset(original: Path, target: Path, *, hardlink: bool = False) -> str:
+    original, target = Path(original), Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists() and original.samefile(target):
+        return str(target)
+    if not hardlink:
+        return shutil.copy2(original, target)
+    # Replace the directory entry so an existing shared inode is never overwritten.
+    pending = target.with_name(f".{target.name}.{time.time_ns()}.tmp")
+    try:
+        os.link(original, pending)
+    except OSError as error:
+        if error.errno != errno.EXDEV:
+            raise
+        shutil.copy2(original, pending)
+    pending.replace(target)
+    return str(target)
+
+
+def deliver_original(original: Path, target: Path, *, hardlink: bool = False) -> dict:
     with Image.open(original) as source:
         width, height = source.size
         mode = source.mode
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(original, target)
+    copy_asset(original, target, hardlink=hardlink)
     return {
         "source_size": [width, height], "output_size": [width, height],
         "crop_box": [0, 0, width, height], "resized": False,
