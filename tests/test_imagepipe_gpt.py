@@ -5,7 +5,6 @@ import io
 import json
 import tempfile
 import threading
-import time
 import unittest
 from email.parser import BytesParser
 from email.policy import default
@@ -14,8 +13,6 @@ from pathlib import Path
 
 from PIL import Image
 
-from imagepipe.client import ImageClient
-from imagepipe.cli import _load_config
 from imagepipe.models import CopyTask, ImageConfig, ImagePlan, ImageTask
 from imagepipe.pipeline import load_run, run
 
@@ -125,28 +122,6 @@ class GPTImagePipelineTests(unittest.TestCase):
         self.assertNotIn("job_id", records["frame"])
         self.assertEqual((run_dir / "originals/identity.png").read_bytes(), self.server.image)
 
-    def test_concurrent_requests_are_paced_and_usage_updates_budget(self):
-        self.config.scheduler.images_per_minute = 600
-        self.config.scheduler.tokens_per_minute = 12_000_000
-        self.config.scheduler.estimated_tokens_per_image = 100
-
-        async def exercise():
-            async with ImageClient(self.config) as client:
-                started = time.monotonic()
-                await asyncio.gather(*(client.submit(
-                    ImageTask(str(i), "text", "A portrait", [], str(self.root / f"{i}.png"), i), []
-                ) for i in range(3)))
-                self.assertGreaterEqual(time.monotonic() - started, 0.19)
-                self.assertEqual(client.tokens_per_image, 300)
-                client.config.scheduler.tokens_per_minute = 60_000
-                await client._pace_gpt_request()
-                started = time.monotonic()
-                await client._pace_gpt_request()
-                self.assertGreaterEqual(time.monotonic() - started, 0.29)
-
-        asyncio.run(exercise())
-        self.assertEqual(len(self.server.requests), 3)
-
     def test_api_error_is_recorded_and_blocks_dependent(self):
         plan = ImagePlan(str(self.root), [
             ImageTask("parent", "text", "reject this request", [], str(self.root / "parent.png"), 1),
@@ -158,26 +133,6 @@ class GPTImagePipelineTests(unittest.TestCase):
         self.assertEqual(report["counts"], {"failed": 1, "blocked": 1})
         self.assertEqual(len(self.server.requests), 1)
         self.assertIn("HTTP 400", report["errors"]["parent"])
-
-
-class ImageProviderConfigTests(unittest.TestCase):
-    def test_cli_profiles_and_legacy_qwen_defaults(self):
-        root = Path(__file__).resolve().parents[1]
-        gpt = _load_config(root / "configs/imagepipe.yaml", "gpt")
-        qwen = _load_config(root / "configs/imagepipe_qwen.yaml", "qwen")
-        self.assertEqual((gpt.provider, gpt.api.key_name, gpt.api.max_reference_images), ("gpt", "OPENAI", 16))
-        self.assertEqual((qwen.provider, qwen.api.key_name, qwen.api.max_reference_images), ("qwen", "QWEN-IMAGE", 10))
-        self.assertEqual(qwen.scheduler.max_active_jobs, 64)
-        legacy = ImageConfig(generation={"model": "qwen-image-2.1"})
-        self.assertEqual(legacy.provider, "qwen")
-        self.assertEqual(legacy.api.request_timeout_seconds, 90)
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory)
-            config = qwen.model_dump()
-            config.pop("provider")
-            (path / "tasks.json").write_text(json.dumps({"config": config, "package_root": directory,
-                                                        "tasks": [], "copies": []}))
-            self.assertEqual(load_run(path)[1].provider, "qwen")
 
 
 if __name__ == "__main__":

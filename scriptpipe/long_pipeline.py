@@ -3,17 +3,53 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 from videopipe.inputs import load_config
+from videopipe.models import PipelineConfig
 
 from .export import export_season
 from .llm import GLMClient, write_json
-from .pipeline import compact_episode, production_brief, prompt, read_json
 from .long_checks import check_long_plan, check_long_season, check_opening, check_scene, resolve_scene
+
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def prompt(name: str) -> str:
+    return (ROOT / "prompt" / "script" / f"scriptpipe_{name}.txt").read_text(encoding="utf-8")
+
+
+def read_json(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def compact_episode(episode: dict) -> dict:
+    """Keep the actual shot evidence needed for story and production review."""
+    fields = ("id", "scene_id", "location_id", "time_of_day", "characters", "prop_ids",
+              "duration", "visual_en", "camera_en", "soundscape_en",
+              "first_frame_prompt_en", "acceptance_en", "dialogue", "reference_priority", "non_diegetic_music_en",
+              "story_events", "event_refs")
+    return {**{k: v for k, v in episode.items() if k != "shots"},
+            "shots": [{k: s[k] for k in fields if k in s} for s in episode.get("shots", [])]}
+
+
+def production_brief(config: PipelineConfig) -> dict:
+    return {
+        "maximum_duration_seconds": config.comfyui.maximum_duration_seconds,
+        "maximum_requested_duration_seconds": (config.comfyui.maximum_requested_duration(config.media.fps)
+                                               if config.generator == "comfyui" else config.comfyui.maximum_duration_seconds),
+        "width": config.media.width, "height": config.media.height, "fps": config.media.fps,
+        "duration_rule": "Choose duration from the scene's dialogue, action and pacing within the configured workflow limit.",
+        "dialogue_language": config.script.language,
+        "language": "Chinese narrative fields; dialogue in the project's language or the specified line language; English production descriptions.",
+        "non_diegetic_music": config.script.non_diegetic_music,
+        "on_screen_text": config.script.on_screen_text,
+    }
 
 
 async def collect(tasks):

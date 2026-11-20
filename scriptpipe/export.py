@@ -145,22 +145,12 @@ def _episode_script(episode: dict, season: dict) -> str:
             "", f"场景：{shot['scene_id']} / {shot['location_id']} / {shot['time_of_day']}；出场：{cast}",
             "",
         ])
-        if "story_events" in shot:
-            for event in shot["story_events"]:
-                if "action_zh" in event:
-                    lines.extend([event["action_zh"], ""])
-                else:
-                    mode = "画外音" if event["voiceover"] else "对白"
-                    lines.extend([f"{names[event['speaker_id']]}（{mode}）：{event['text_zh']}", ""])
-        else:
-            lines.extend([f"剧情：{shot['beat_zh']}", "", f"动作开始：{shot['action_start_zh']}", "",
-                          f"动作结束：{shot['action_end_zh']}", ""])
-            for dialogue in shot.get("dialogue", []):
-                mode = "画外音" if dialogue.get("voiceover") is True else "对白"
-                lines.extend([f"{names[dialogue['speaker_id']]}（{mode}）：{dialogue['text_zh']}", ""])
-            if not shot.get("dialogue"):
-                lines.extend(["对白：无。", ""])
-            lines.extend([f"切镜理由：{shot['cut_reason_zh']}", ""])
+        for event in shot["story_events"]:
+            if "action_zh" in event:
+                lines.extend([event["action_zh"], ""])
+            else:
+                mode = "画外音" if event["voiceover"] else "对白"
+                lines.extend([f"{names[event['speaker_id']]}（{mode}）：{event['text_zh']}", ""])
         elapsed = end
     lines.extend(["## 本集结束状态", "", _text(episode.get("end_state", "")), ""])
     return "\n".join(lines)
