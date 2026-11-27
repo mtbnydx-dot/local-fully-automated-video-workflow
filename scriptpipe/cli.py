@@ -3,11 +3,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import math
 from pathlib import Path
 
 from .llm import DEFAULT_CONCURRENCY, DEFAULT_ENDPOINT, DEFAULT_KEY_NAME, DEFAULT_MAX_TOKENS, DEFAULT_MODEL, GLMClient, load_key
 from .long_pipeline import run_long
+from .reading import CONTEXT_TOKENS
 
 
 def main() -> None:
@@ -18,14 +18,20 @@ def main() -> None:
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--key-name", help="Default: DEEPSEEK-KEY; GLMKEY for glm models")
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
-    parser.add_argument("--episodes", type=int, default=8, help="Number of episodes (default: 8)")
+    parser.add_argument("--episodes", type=int, help="Fixed episode count (default: planned from the story)")
     parser.add_argument("--long-form", "--long", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--long-review", choices=("off", "report"), default="off",
                         help="Long-form: optional one-pass LLM reports, without automatic rewriting (default: off)")
-    parser.add_argument("--episode-minutes", type=float, default=5,
-                        help="Long-form runtime target per episode; scene/shot counts follow the story (default: 5)")
+    parser.add_argument("--episode-minutes", type=float, help="Fixed target minutes per episode (default: planned per episode)")
+    scope = parser.add_mutually_exclusive_group()
+    scope.add_argument("--chapters", nargs=2, type=int, metavar=("FIRST", "LAST"),
+                       help="Use this inclusive range of chapters (numbered in source order)")
+    scope.add_argument("--whole-book", nargs="?", type=int, const=1, metavar="SEASON",
+                       help="Plan seasons from the whole book, then produce the selected season (default: 1)")
+    parser.add_argument("--context-tokens", type=int, default=CONTEXT_TOKENS,
+                        help="Model context window used to budget reading and planning inputs")
     parser.add_argument("--delivery", type=Path, help="Long-form handoff directory, e.g. /data/season")
-    parser.add_argument("--stop-after", choices=("season", "openings", "plans", "drafts", "review"), help="Save the selected long-form stage and exit")
+    parser.add_argument("--stop-after", choices=("reading", "season", "openings", "plans", "drafts", "review"), help="Save the selected long-form stage and exit")
     parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY,
                         help=f"Maximum simultaneous model requests (default: {DEFAULT_CONCURRENCY})")
     parser.add_argument("--reasoning-effort", choices=("low", "high", "max"), default="high")
@@ -36,10 +42,8 @@ def main() -> None:
     parser.add_argument("--production-config", type=Path)
     parser.add_argument("--notes", type=Path, help="Optional source-specific editorial notes")
     args = parser.parse_args()
-    if args.episodes < 1 or args.concurrency < 1:
-        parser.error("episodes/concurrency must be positive")
-    if not math.isfinite(args.episode_minutes) or args.episode_minutes <= 0 or args.max_tokens < 1:
-        parser.error("episode-minutes must be finite and positive; max-tokens must be positive")
+    if args.concurrency < 1 or args.max_tokens < 1:
+        parser.error("concurrency and max-tokens must be positive")
     key_name = args.key_name or ("GLMKEY" if args.model.startswith("glm") else DEFAULT_KEY_NAME)
 
     async def execute() -> None:
@@ -49,6 +53,7 @@ def main() -> None:
         try:
             result = await run_long(
                 args.source, args.output, client, episode_count=args.episodes, episode_minutes=args.episode_minutes,
+                chapters=args.chapters, whole_book_season=args.whole_book, context_tokens=args.context_tokens,
                 production_config=args.production_config, notes_path=args.notes, delivery=args.delivery,
                 stop_after=args.stop_after, review_reasoning_effort=args.review_reasoning_effort,
                 long_review=args.long_review,

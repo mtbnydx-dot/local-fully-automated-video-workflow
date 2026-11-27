@@ -15,7 +15,8 @@
 ```mermaid
 flowchart TD
     S0["原文 + 可选 notes + CLI 参数"] --> S1["清理嵌入的 MediaWiki CSS<br/>保存 source.cleaned.txt，构造写作 brief"]
-    S1 --> S2["LLM 整季规划，或读取已有 season.json<br/>人物、服装、地点、道具、分集状态"]
+    S1 --> RE["按取材范围准备编号原文或分块阅读地图，全书模式先分季"]
+    RE --> S2["LLM 整季规划，或读取已有 season.json<br/>人物、服装、地点、道具、分集状态"]
     S2 --> SO["按本集 source_ranges 取原文<br/>每集独立创作开场，保存 openings"]
     SO --> S8["该集开场完成后，P2 接着续写正文<br/>保存 plans，程序合并两段 events"]
     S8 --> S9["按本场定稿与相关资产设计视听<br/>首镜完整承载开场，生成首帧与配乐"]
@@ -30,7 +31,7 @@ flowchart TD
 
 ### 写作与检查
 
-默认 8 集，由 `--episodes` 配置。长剧每集目标分钟数由 `--episode-minutes` 配置（默认 5），包含开场时长。长剧每集先写独立开场，P2 只写开场之后的正式事件；程序合并两段，P3 把开场完整放入首个片段并安排后续视听。场景数量与正文片段数量由内容决定，组装时统一编号并更新锚点和实际场次范围，保存到 `assembled_plans/`。单镜时长上限来自制作配置的 `comfyui.maximum_duration_seconds`，默认 10 秒；按当前 24fps、5+17n 帧对齐，brief 中请求上限为 9.4 秒。开场请求时长范围为 5 秒至单次请求上限与 10 秒的较小值。视频交付使用生成结果的实测时长。
+P1 默认按故事分集并估计逐集目标时长。`--episodes` 可固定集数，`--episode-minutes` 可固定每集时长（含开场）。长剧每集先写独立开场，P2 只写开场之后的正式事件；程序合并两段，P3 把开场完整放入首个片段并安排后续视听。场景数量与正文片段数量由内容决定，组装时统一编号并更新锚点和实际场次范围，保存到 `assembled_plans/`。单镜时长上限来自制作配置的 `comfyui.maximum_duration_seconds`，默认 10 秒；按当前 24fps、5+17n 帧对齐，brief 中请求上限为 9.4 秒。开场请求时长范围为 5 秒至单次请求上限与 10 秒的较小值。视频交付使用生成结果的实测时长。
 
 代码检查覆盖字段类型、非空说明、唯一 ID、人物/服装/地点/道具引用和配置中的工作流时长上限。对白按发言顺序记录，可有多轮、多位说话者，长度和语速由创作决定。程序从 events 解析逐字对白与中文动作；英文描述可引用剧情需要的中文专名或文字。LLM 文字审核依据实际对白、动作、因果和连续性提出问题。
 
@@ -55,7 +56,7 @@ flowchart TD
 
 完成检查且导出成功后，`run.json.status` 为 `text_ready` 或 `needs_text_revision`，未消除的错误列在 `quality.json.open_errors`。导出索引相应为 `text_complete_images_pending` 或 `needs_text_revision_images_pending`，`render_ready` 初始为 `false`；文字审核仍有错误时，代码也会导出可导出的包并保留这些记录。
 
-`scriptpipe` 没有单独的 `resume` 子命令，重新使用同一输出目录运行会复用阶段文件。程序复用整季规划，检查缓存的开场、正文和分场结果，并在审核输入与保存的输入相同时复用对应审核。长剧支持 `--stop-after season|openings|plans|drafts|review`；`openings` 保存各集开场后停止，`review` 在写完 `quality.json` 后、导出前停止。默认导出到 `<output>/delivery`，可用 `--delivery` 指定交接目录。
+`scriptpipe` 没有单独的 `resume` 子命令，重新使用同一输出目录运行会复用阶段文件。程序复用整季规划，检查缓存的开场、正文和分场结果，并在审核输入与保存的输入相同时复用对应审核。长剧支持 `--stop-after reading|season|openings|plans|drafts|review`；`openings` 保存各集开场后停止，`review` 在写完 `quality.json` 后、导出前停止。默认导出到 `<output>/delivery`，可用 `--delivery` 指定交接目录。
 
 代码依据：[入口](../scriptpipe/cli.py)、[长剧流程](../scriptpipe/long_pipeline.py)、[通用检查](../scriptpipe/checks.py)、[长剧检查](../scriptpipe/long_checks.py)、[导出](../scriptpipe/export.py)、[LLM 请求](../scriptpipe/llm.py)。
 

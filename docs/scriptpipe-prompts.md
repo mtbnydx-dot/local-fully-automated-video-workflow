@@ -1,6 +1,6 @@
 # 长链路 prompt 与声音调试
 
-正式文件位于 `prompt/script/`。`--long` 默认执行 P1 整季、每集开场、P2 正文续写、P3 每场视听，随后程序导出；P4/P5 由 `--long-review report` 按需执行一次。`quality.json` 中的 `llm_review` 区分 skipped 与 reported。
+阶段模板位于 `prompt/script/`。所有文字 LLM 请求的 system prompt 均由完整的 [短剧写作指导](../skills/short-drama-writing/SKILL.md) 和当前阶段模板组成，覆盖阅读、分季、创作及审阅。`--long` 默认执行 P1 整季、每集开场、P2 正文续写、P3 每场视听，随后程序导出；P4/P5 由 `--long-review report` 按需执行一次。`quality.json` 中的 `llm_review` 区分 skipped 与 reported。
 
 ## 每集开场在哪里调
 

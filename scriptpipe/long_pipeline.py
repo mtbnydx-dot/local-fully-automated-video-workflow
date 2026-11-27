@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import math
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,15 +12,12 @@ from videopipe.inputs import load_config
 from videopipe.models import PipelineConfig
 
 from .export import export_season
-from .llm import GLMClient, write_json
+from .llm import DEFAULT_MAX_TOKENS, GLMClient, write_json
+from .reading import CONTEXT_TOKENS, prepare_source
 from .long_checks import check_long_plan, check_long_season, check_opening, check_scene, resolve_scene
 
 
 ROOT = Path(__file__).resolve().parent.parent
-
-
-def prompt(name: str) -> str:
-    return (ROOT / "prompt" / "script" / f"scriptpipe_{name}.txt").read_text(encoding="utf-8")
 
 
 def read_json(path: Path) -> dict:
@@ -69,16 +65,28 @@ def story_evidence(episode: dict) -> dict:
 
 
 async def run_long(source_path: Path, out: Path, client: GLMClient, *,
-                   episode_count: int = 8, episode_minutes: float = 5,
+                   episode_count: int | None = None, episode_minutes: float | None = None,
+                   chapters: tuple[int, int] | None = None, whole_book_season: int | None = None,
+                   context_tokens: int = CONTEXT_TOKENS,
                    production_config: Path | None = None, notes_path: Path | None = None,
                    delivery: Path | None = None, stop_after: str | None = None,
                    review_reasoning_effort: str | None = None, long_review: str = "off") -> dict:
-    if episode_count < 1:
+    state_file = out / "run.json"
+    previous = read_json(state_file) if state_file.exists() else {}
+    if previous:
+        old_brief = previous["brief"]
+        if episode_count is None:
+            episode_count = old_brief["episode_count"]
+        if episode_minutes is None and old_brief["target_episode_duration_seconds"] is not None:
+            episode_minutes = old_brief["target_episode_duration_seconds"] / 60
+    if episode_count is not None and episode_count < 1:
         raise ValueError("episode_count must be positive")
-    if not math.isfinite(episode_minutes) or episode_minutes <= 0:
+    if episode_minutes is not None and (not math.isfinite(episode_minutes) or episode_minutes <= 0):
         raise ValueError("episode_minutes must be positive and finite")
     if long_review not in ("off", "report"):
         raise ValueError("long_review must be off or report")
+    if whole_book_season is not None and (whole_book_season < 1 or chapters is not None):
+        raise ValueError("Choose either a chapter range or a positive whole-book season number")
     review_reasoning_effort = review_reasoning_effort or client.reasoning_effort
     config = load_config(production_config or Path("configs/b200.yaml"))
     out.mkdir(parents=True, exist_ok=True)
@@ -86,31 +94,33 @@ async def run_long(source_path: Path, out: Path, client: GLMClient, *,
     brief = {
         **production_brief(config),
         "episode_count": episode_count,
-        "target_episode_duration_seconds": episode_minutes * 60,
-        "target_season_duration_seconds": episode_count * episode_minutes * 60,
+        "target_episode_duration_seconds": episode_minutes * 60 if episode_minutes is not None else None,
+        "target_season_duration_seconds": episode_count * episode_minutes * 60 if episode_count and episode_minutes else None,
     }
     brief["opening_duration_range_seconds"] = [5, min(10, brief["maximum_requested_duration_seconds"])]
     if brief["opening_duration_range_seconds"][1] < 5:
         raise ValueError("Long-form openings require a workflow that supports a clip of at least 5 seconds")
-    state_file = out / "run.json"
+    reading = {"chapters": list(chapters) if chapters else None, "whole_book_season": whole_book_season,
+               "context_tokens": context_tokens, "max_tokens": getattr(client, "max_tokens", DEFAULT_MAX_TOKENS)}
     state = {"source": str(source_path.resolve()), "model": client.model,
-             "endpoint": client.endpoint, "mode": "long_form", "brief": brief,
+             "endpoint": client.endpoint, "mode": "long_form", "brief": brief, "reading": reading,
              "planning_effort": client.reasoning_effort, "writing_effort": client.reasoning_effort,
              "review_effort": review_reasoning_effort, "long_review": long_review,
              "delivery": str(delivery.resolve()), "status": "running",
              "started_at": datetime.now(timezone.utc).isoformat()}
-    if state_file.exists():
-        previous = read_json(state_file)
-        if previous.get("source") != state["source"] or previous.get("brief") != brief:
+    if previous:
+        legacy_scope_change = "reading" not in previous and (chapters or whole_book_season)
+        if (previous.get("source") != state["source"] or previous.get("brief") != brief
+                or previous.get("reading", reading) != reading or legacy_scope_change):
             raise ValueError("Use a new output directory for a different source, prompt schema or duration plan")
         state["started_at"] = previous["started_at"]
     write_json(state_file, state)
-    original = source_path.read_text(encoding="utf-8")
-    source = re.sub(r"\.mw-parser-output[^{}]*\{[^{}]*\}", "", original)
-    (out / "source.cleaned.txt").write_text(source, encoding="utf-8")
-    paragraphs = [{"id": index, "text": text} for index, text in enumerate(
-        (line for line in source.splitlines() if line.strip()), 1)]
-    write_json(out / "source.paragraphs.json", paragraphs)
+    skill = (ROOT / "skills/short-drama-writing/SKILL.md").read_text(encoding="utf-8")
+
+    def prompt(name):
+        template = (ROOT / "prompt/script" / f"scriptpipe_{name}.txt").read_text(encoding="utf-8")
+        return f"{skill}\n\n# 当前阶段任务\n\n{template}"
+
     notes = notes_path.read_text(encoding="utf-8") if notes_path else ""
     write_json(out / "creative_brief.json", brief)
 
@@ -155,19 +165,30 @@ async def run_long(source_path: Path, out: Path, client: GLMClient, *,
 
     try:
         season_path = out / "season.json"
+        scope_path = out / "reading/scope.json"
         if season_path.exists():
+            paragraphs = read_json(out / "source.paragraphs.json")
+            bounds = read_json(scope_path)["source_range"] if scope_path.exists() else [1, len(paragraphs)]
+            if pause("reading"):
+                return state
             season = read_json(season_path)
         else:
-            season = await client.complete("long_season", prompt("long_season_plan_zh"), {
-                "brief": {key: brief[key] for key in ("episode_count", "target_episode_duration_seconds",
-                                                       "target_season_duration_seconds", "dialogue_language")},
-                "source_paragraphs": paragraphs, "editor_notes": notes,
-            })
-            write_json(season_path, season)
+            planning_input = {"brief": {key: brief[key] for key in (
+                "episode_count", "target_episode_duration_seconds", "target_season_duration_seconds", "dialogue_language")},
+                "editor_notes": notes}
+            paragraphs, material = await prepare_source(
+                source_path, out, client, prompt, planning_input, chapters=chapters, whole_book_season=whole_book_season,
+                context_tokens=context_tokens, max_tokens=reading["max_tokens"])
+            bounds = material["source_scope"]["source_range"]
+            if pause("reading"):
+                return state
+            season = await client.complete("long_season", prompt("long_season_plan_zh"), {**planning_input, **material})
         plans = season["episodes"]
-        if [item["id"] for item in plans] != [f"ep{i:02}" for i in range(1, episode_count + 1)]:
-            raise ValueError("Season must contain exactly the requested ordered episode IDs")
-        excerpts = {plan["id"]: source_excerpt(plan, paragraphs) for plan in plans}
+        prepare_episodes(plans, episode_count, brief["target_episode_duration_seconds"])
+        state.update(episode_count=len(plans), target_season_duration_seconds=sum(p["target_duration_seconds"] for p in plans))
+        excerpts = {plan["id"]: source_excerpt(plan, paragraphs, bounds) for plan in plans}
+        if not season_path.exists():
+            write_json(season_path, season)
         if pause("season"):
             return state
 
@@ -187,8 +208,9 @@ async def run_long(source_path: Path, out: Path, client: GLMClient, *,
             result = await checked(f"{plan['id']}_plan", "long_episode_plan_zh", {
                 "episode_plan": plan, "source_excerpt": excerpts[plan["id"]], "asset_catalog": catalog,
                 "opening": opening,
-                "brief": {key: brief[key] for key in ("target_episode_duration_seconds", "dialogue_language",
-                                                       "maximum_requested_duration_seconds", "opening_duration_range_seconds")},
+                "brief": {"target_episode_duration_seconds": plan["target_duration_seconds"],
+                          **{key: brief[key] for key in ("dialogue_language", "maximum_requested_duration_seconds",
+                                                         "opening_duration_range_seconds")}},
                 "editor_notes": notes,
             }, destination, lambda candidate: check_long_plan(candidate, season, plan, opening=opening))
             result = merge_opening(result, opening, brief["opening_duration_range_seconds"])
@@ -279,19 +301,31 @@ async def run_long(source_path: Path, out: Path, client: GLMClient, *,
         raise
 
 
-def source_excerpt(plan: dict, paragraphs: list[dict]) -> list[dict]:
+def prepare_episodes(plans: list[dict], episode_count: int | None, fixed_seconds: float | None) -> None:
+    if not plans or (episode_count is not None and len(plans) != episode_count):
+        raise ValueError("Season must contain the requested episodes")
+    for number, plan in enumerate(plans, 1):
+        plan["id"] = f"ep{number:02}"
+        seconds = fixed_seconds if fixed_seconds is not None else plan.get("target_duration_seconds")
+        if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0:
+            raise ValueError(f"{plan['id']}: target_duration_seconds must be positive")
+        plan["target_duration_seconds"] = seconds
+
+
+def source_excerpt(plan: dict, paragraphs: list[dict], bounds=None) -> list[dict]:
     """Resolve P1 selections in source order, keeping the selected original text."""
     ranges = plan.get("source_ranges")
     if not isinstance(ranges, list) or not ranges:
         raise ValueError(f"{plan['id']}: source_ranges must contain paragraph ranges")
-    for bounds in ranges:
-        if (not isinstance(bounds, list) or len(bounds) != 2
-                or any(type(number) is not int for number in bounds)):
+    for pair in ranges:
+        if (not isinstance(pair, list) or len(pair) != 2
+                or any(type(number) is not int for number in pair)):
             raise ValueError(f"{plan['id']}: source_ranges entries must be [start, end] integers")
-    result, previous_end = [], 0
+    first, last = bounds or (1, len(paragraphs))
+    result, previous_end = [], first - 1
     # P1 may list a flashback after a later passage; extraction follows source order.
     for start, end in sorted(ranges):
-        if not previous_end < start <= end <= len(paragraphs):
+        if not previous_end < start <= end <= last:
             raise ValueError(f"{plan['id']}: source_ranges must be nonoverlapping and within the numbered source")
         result.extend(paragraphs[start - 1:end])
         previous_end = end
