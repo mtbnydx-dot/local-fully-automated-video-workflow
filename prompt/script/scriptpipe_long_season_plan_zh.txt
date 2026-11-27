@@ -4,14 +4,14 @@
 
 本次输入是一个 JSON 数据包：
 - brief：集数、单集与全季目标时长、对白语言等创作要求。
-- source_paragraphs：原著全文，格式为 [{"id": 1, "text": "第一段原文"}]，段号从 1 开始。
+- source_scope：本次可取材的全局段号范围，指定分季时含本季主线。source_paragraphs 提供范围内带全局 id 的原文；长输入以 source_maps 提供带同一套段号的素材地图。
 - editor_notes：用户提供的编辑与改编要求，可以为空。
 
-这一阶段读完整原著。开场编剧只收到本集规划、你选定的原文片段和简洁的人物资产目录，创作本集首个片段的正式对白与动作。P2 接收这些材料和已定稿的开场，继续写本集正文。最后一阶段根据程序合并的正式剧本完成首帧与视频提示词。你需要把分集因果、人物特点和稳定外观准备清楚，让后续创作集中精力写好具体场面。
+依据本次材料选定本季起点和有实际兑现的终点。开场编剧只收到本集规划、你选定的原文片段和简洁的人物资产目录，创作本集首个片段的正式对白与动作。P2 接收这些材料和已定稿的开场，继续写本集正文。最后一阶段根据程序合并的正式剧本完成首帧与视频提示词。你需要把分集因果、人物特点和稳定外观准备清楚，让后续创作集中精力写好具体场面。
 
 围绕观众关心谁、盼着什么、哪次变化值得看下去安排剧情。对白、声音、画面和动作共同承载情绪；反击、发现、选择和关系变化的吸引力来自具体处境与充分铺垫。根据原著展开完整故事，落实 editor_notes 中明确提出的改编要求，保留人物行为的动机和事件之间的因果。
 
-episodes 数量采用 brief.episode_count。以 brief.target_episode_duration_seconds 和 brief.target_season_duration_seconds 判断剧情承载量，把关键冲突及其结果合理分配到各集。整季规划确定必要结果，分集编剧负责实现这些结果的完整场面。
+brief.episode_count 有值时采用指定集数，为 null 时依据主线转折及场面容量自主分集。brief.target_episode_duration_seconds 有值时采用指定时长，为 null 时按本集对白、动作与反应估计 target_duration_seconds（正数，含开场）。把关键冲突及其结果合理分配到各集。整季规划确定必要结果，分集编剧负责实现这些结果的完整场面。
 
 输出一个符合第三部分结构的合法 JSON 对象。以 _en 结尾的内容字段使用英文，其余叙事内容使用中文，实体 ID 使用稳定的 ASCII snake_case。使用同一个 ID 表示同一实体及其别名。
 
@@ -118,13 +118,15 @@ episodes 数量采用 brief.episode_count。以 brief.target_episode_duration_se
 
 ## episodes
 
-* 按观看顺序安排本季全部分集，条目数量与 brief.episode_count 一致。
-* 为主要冲突的铺垫、发展和兑现分配空间，并在全季结尾完成原著及编辑要求确定的故事结果。
+* 按观看顺序安排本季全部分集，逐项列出实际要制作的分集。
+* 为主要冲突的铺垫、发展和兑现分配空间，并在本季结尾兑现所选故事段落的核心承诺。
 * 每集包含下列分集字段。
 
-## episodes[].id
+程序按数组顺序分配集号。
 
-* 分集 ID，依次采用 ep01、ep02 等格式。
+## episodes[].target_duration_seconds
+
+* 本集预计表演时长，以秒表示，遵循 brief 中明确指定的时长。
 
 ## episodes[].title
 
@@ -134,7 +136,7 @@ episodes 数量采用 brief.episode_count。以 brief.target_episode_duration_se
 
 * 填写本集所依据的原文段号闭区间，格式为 [[起始段号, 结束段号]]。
 * 程序会按这些范围提取本集原文交给分集编剧。
-* 需要分散的原文时填写多个区间，例如 [[1, 3], [8, 9]]；段号采用 source_paragraphs 中的实际 id。
+* 需要分散的原文时填写多个区间，例如 [[1, 3], [8, 9]]；沿用本次材料中的原文全局段号。
 * 选入支撑本集关键事实、人物动机和具体交锋的相关原文。
 * 本集多个区间按原文段号升序排列，相邻区间保持互不重叠；不同集可以引用同一段原文。
 
@@ -151,7 +153,7 @@ episodes 数量采用 brief.episode_count。以 brief.target_episode_duration_se
 ## episodes[].cliffhanger
 
 * 写清本集结尾需要形成的信息、关系或利害变化，以及观众由此获得的满足或产生的新期待。
-* 结局集写全剧的收束与兑现。
+* 结局集写本季的收束与兑现。
 * 具体通过怎样的台词和表演动作实现，由 P2 决定。
 
 ## episodes[].start_state
@@ -227,7 +229,7 @@ episodes 数量采用 brief.episode_count。以 brief.target_episode_duration_se
   ],
   "episodes": [
     {
-      "id": "ep01",
+      "target_duration_seconds": 120,
       "title": "再说一遍",
       "source_ranges": [[1, 3]],
       "hook": "欠了三个月的工资似乎今天就能拿到，但马强提出的签字条件藏着损害周梅利益的内容。",

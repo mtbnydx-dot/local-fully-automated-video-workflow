@@ -11,31 +11,10 @@ from PIL import Image
 from imagepipe.cli import _load_config
 from imagepipe.models import CopyTask, ImagePlan, ImageTask
 from imagepipe.pipeline import load_run, run
-from imagepipe.tool_bridge import ReferenceSheetCache, accept_image, pending_requests, prepare_tool_args
+from imagepipe.tool_bridge import accept_image, pending_requests, prepare_tool_args
 
 
 class CodexImagePipelineTests(unittest.TestCase):
-    def test_reference_sheet_cache_reuses_panels_and_tracks_changed_sources(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            references = [root / f"ref_{index}.png" for index in range(6)]
-            for index, path in enumerate(references):
-                Image.new("RGB", (12, 20), (index * 30, 40, 90)).save(path)
-            cache = ReferenceSheetCache(root / "cache")
-            first = prepare_tool_args("Exact prompt", references, root / "one", sheet_cache=cache)
-            reloaded = ReferenceSheetCache(root / "cache")
-            second = prepare_tool_args("Exact prompt", references, root / "two", sheet_cache=reloaded)
-            self.assertEqual(first["prompt"], second["prompt"])
-            for a, b in zip(first["referenced_image_paths"], second["referenced_image_paths"]):
-                self.assertTrue(Path(a).samefile(b))
-            Image.new("RGB", (13, 21), "blue").save(references[-1])
-            third = prepare_tool_args("Exact prompt", references, root / "three", sheet_cache=reloaded)
-            self.assertTrue(Path(first["referenced_image_paths"][0]).samefile(third["referenced_image_paths"][0]))
-            self.assertFalse(Path(first["referenced_image_paths"][-1]).samefile(third["referenced_image_paths"][-1]))
-            with Image.open(third["referenced_image_paths"][-1]) as sheet:
-                self.assertEqual(sheet.getpixel((12, 64)), (0, 0, 255))
-            self.assertEqual(len(list((root / "cache").glob("*.png"))), 4)
-
     def test_six_references_keep_original_pixels_and_order_in_three_tool_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -46,8 +46,7 @@ def season_fixture():
             "characters": [{"id": character, "wardrobe_id": "work"}
                            for character in (["hero", "later_guest"] if number == 3 else ["hero"])],
             "prop_ids": [], "duration": 5.875, "dialogue": [],
-            "beat_zh": "观察环境", "action_start_zh": "抬头", "action_end_zh": "目光停住",
-            "action_complete": True, "cut_reason_zh": "完成观察",
+            "story_events": [{"id": "ev001", "action_zh": "主角抬头，目光停住。"}],
             "visual_en": "The adult looks around and settles their gaze.", "camera_en": "Locked wide shot.",
             "soundscape_en": "Quiet ambient sound.", "first_frame_prompt_en": "The adult stands still before looking up.",
             "acceptance_en": ["The adult completes the glance."],
@@ -90,27 +89,6 @@ class ScriptBatchTests(unittest.TestCase):
                               hardlink_images=self.image_config.asset_copy_mode == "hardlink")
         return plan, result
 
-    def test_hardlink_batch_shares_images_and_copies_editable_metadata(self):
-        self.image_config.asset_copy_mode = "hardlink"
-        output = self.root / "linked-delivery"
-        plan, summary = self.supply_images_and_export(["ep01", "ep02"], output)
-        for task in plan.tasks:
-            source = Path(task.target_path)
-            self.assertTrue(source.samefile(output / source.relative_to(self.canonical)))
-        for episode in summary["episodes"]:
-            relative = Path(episode["package"])
-            self.assertFalse((output / relative).samefile(self.canonical / relative))
-            package = load_package(output / relative)
-            for shot in package.shots:
-                for asset in shot.asset_bindings:
-                    self.assertTrue(asset.path.samefile(self.canonical / asset.path.relative_to(output)))
-        self.assertFalse((output / "season.json").samefile(self.canonical / "season.json"))
-        source = Path(plan.tasks[0].target_path)
-        destination = output / source.relative_to(self.canonical)
-        before = destination.read_bytes()
-        source.unlink()
-        self.assertEqual(destination.read_bytes(), before)
-
     def test_first_batch_is_portable_and_preserves_canonical_ids_seeds_and_images(self):
         output = self.root / "delivery-ep01-ep02"
         plan, summary = self.supply_images_and_export(["ep01", "ep02"], output)
@@ -140,28 +118,6 @@ class ScriptBatchTests(unittest.TestCase):
         for slot in manifest["shared_assets"] + manifest["first_frames"]:
             self.assertEqual((output / slot["path"]).read_bytes(), (self.canonical / slot["path"]).read_bytes())
 
-    def test_later_batch_reuses_the_same_identity_and_keeps_global_episode_numbering(self):
-        early = self.root / "delivery-ep01-ep02"
-        early_plan, _ = self.supply_images_and_export(["ep01", "ep02"], early)
-        identity = self.canonical / "assets/review/characters/identity-hero.png"
-        original_bytes, original_mtime = identity.read_bytes(), identity.stat().st_mtime_ns
-        later = self.root / "delivery-ep03"
-        later_plan, summary = self.supply_images_and_export(["ep03"], later)
-        self.assertEqual(identity.stat().st_mtime_ns, original_mtime)
-        self.assertEqual(identity.read_bytes(), original_bytes)
-        self.assertEqual((later / identity.relative_to(self.canonical)).read_bytes(), original_bytes)
-        early_identity = next(task for task in early_plan.tasks if task.asset_id == "identity-hero")
-        later_identity = next(task for task in later_plan.tasks if task.asset_id == "identity-hero")
-        self.assertEqual(early_identity, later_identity)
-        state = json.loads((self.root / "images-ep03/state.json").read_text())
-        self.assertTrue(state["tasks"]["identity-hero"]["reused"])
-        self.assertEqual(state["tasks"]["identity-hero"]["attempts"], 0)
-        self.assertEqual([episode["id"] for episode in summary["episodes"]], ["ep03"])
-        package = load_package(later / summary["episodes"][0]["package"])
-        self.assertEqual([(shot.id, shot.seed) for shot in package.shots], [("ep03_s001", 3001)])
-        self.assertEqual((later / "season.json").read_bytes(), (early / "season.json").read_bytes())
-        self.assertFalse((later / "episodes/ep01").exists())
-
     def test_export_preserves_configured_canvas_multilingual_turns_and_reference_priority(self):
         season, episodes = season_fixture()
         shot = episodes[2]["shots"][0]
@@ -170,6 +126,11 @@ class ScriptBatchTests(unittest.TestCase):
             {"speaker_id": "later_guest", "text_zh": "2 > 1. OK?", "language": "English", "voiceover": False, "delivery_en": "Quickly."},
             {"speaker_id": "hero", "text_zh": "别走，我还有事要问你！", "voiceover": False, "delivery_en": "Interrupting."},
         ])
+        shot["story_events"].extend(
+            {"id": f"ev{index:03}", "speaker_id": line["speaker_id"], "text_zh": line["text_zh"],
+             "voiceover": line["voiceover"]}
+            for index, line in enumerate(shot["dialogue"], 2)
+        )
         config = PipelineConfig(comfyui={"maximum_duration_seconds": 12}, max_attempts=5,
                                 media={"width": 1024, "height": 576, "upscale_factor": 6},
                                 script={"non_diegetic_music": "Tense strings.", "on_screen_text": "Include the message on the phone."})

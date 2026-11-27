@@ -18,8 +18,9 @@ scriptpipe = "scriptpipe.cli:main"
 imagepipe = "imagepipe.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["videopipe*", "scriptpipe*", "imagepipe*", "prompt"]
+include = ["videopipe*", "scriptpipe*", "imagepipe*", "prompt", "skills"]
 
 [tool.setuptools.package-data]
 videopipe = ["workflows/*.json", "workflows/*.md", "fonts/*"]
 prompt = ["script/*.txt", "image/*.txt", "videopipe/*.txt"]
+skills = ["short-drama-writing/SKILL.md"]
